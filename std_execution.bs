@@ -4580,6 +4580,8 @@ from the operation before the operation completes.
 
     2. <i>Synchronization:</i> This operation synchronizes with all `pop_front` operations on this object.
 
+    3. <i>Remarks:</i> If the thread of execution calling `run()` guarantees concurrent or parallel forward progress, then it guarantees parallel forward progress until `run()` returns; otherwise, it guarantees weakly parallel forward progress.
+
 ## Coroutine utilities <b>[execution.coro_utils]</b> ## {#spec-execution.coro_utils}
 
 ### `execution::as_awaitable` <b>[execution.coro_utils.as_awaitable]</b> ### {#spec-execution.coro_utils.as_awaitable}
