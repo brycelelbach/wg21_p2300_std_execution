@@ -5,7 +5,7 @@ CXXFLAGS=-I$(IDIR) -std=c++20 -stdlib=libc++ -ftemplate-backtrace-limit=0 -pthre
 
 LIBS=-pthread
 
-all: hello_world hello_coro retry server_theme/let_value server_theme/on_transfer
+all: hello_world hello_coro retry server_theme/let_value server_theme/on_transfer server_theme/then_upon
 
 execution: $(IDIR)/execution.hpp
 
@@ -28,6 +28,9 @@ let_value: $(BUILDDIR)/let_value.o
 	$(CXX) -o $(BUILDDIR)/$@ $^ $(CXXFLAGS) $(LIBS)
 
 on_transfer: $(BUILDDIR)/on_transfer.o
+	$(CXX) -o $(BUILDDIR)/$@ $^ $(CXXFLAGS) $(LIBS)
+
+then_upon: $(BUILDDIR)/then_upon.o
 	$(CXX) -o $(BUILDDIR)/$@ $^ $(CXXFLAGS) $(LIBS)
 
 .PHONY: clean
