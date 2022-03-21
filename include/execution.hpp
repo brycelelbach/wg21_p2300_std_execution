@@ -3943,7 +3943,7 @@ namespace std::execution {
       }
 
       auto operator()() const noexcept {
-        return just(tuple{});
+        return just();
       }
     };
 
