@@ -4247,7 +4247,11 @@ namespace std::this_thread {
         return std::move(std::get<1>(__state.__data_));
       }
     };
+  } // namespace __sync_wait
+  using __sync_wait::sync_wait_t;
+  inline constexpr sync_wait_t sync_wait{};
 
+  namespace __sync_wait {
     ////////////////////////////////////////////////////////////////////////////
     // [execution.senders.consumers.sync_wait_with_variant]
     struct sync_wait_with_variant_t {
@@ -4279,7 +4283,7 @@ namespace std::this_thread {
         nothrow_tag_invocable<sync_wait_with_variant_t, _Sender>) {
         return tag_invoke(sync_wait_with_variant_t{}, (_Sender&&) __sndr);
       }
-      template <execution::__single_value_variant_sender<__impl::__env> _Sender>
+      template <execution::sender _Sender>
         requires
           (!execution::__tag_invocable_with_completion_scheduler<
             sync_wait_with_variant_t, execution::set_value_t, _Sender>) &&
@@ -4291,8 +4295,6 @@ namespace std::this_thread {
       }
     };
   } // namespace __sync_wait
-  using __sync_wait::sync_wait_t;
-  inline constexpr sync_wait_t sync_wait{};
   using __sync_wait::sync_wait_with_variant_t;
   inline constexpr sync_wait_with_variant_t sync_wait_with_variant{};
 } // namespace std::this_thread
