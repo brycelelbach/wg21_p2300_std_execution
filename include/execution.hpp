@@ -4248,8 +4248,6 @@ namespace std::this_thread {
       }
     };
   } // namespace __sync_wait
-  using __sync_wait::sync_wait_t;
-  inline constexpr sync_wait_t sync_wait{};
 
   namespace __sync_wait {
     ////////////////////////////////////////////////////////////////////////////
@@ -4291,10 +4289,12 @@ namespace std::this_thread {
           invocable<sync_wait_t, __impl::__into_variant_result_t<_Sender>>
       optional<__impl::__sync_wait_with_variant_result_t<_Sender>>
       operator()(_Sender&& __sndr) const {
-        return sync_wait(execution::into_variant((_Sender&&) __sndr));
+        return sync_wait_t{}(execution::into_variant((_Sender&&) __sndr));
       }
     };
   } // namespace __sync_wait
+  using __sync_wait::sync_wait_t;
+  inline constexpr sync_wait_t sync_wait{};
   using __sync_wait::sync_wait_with_variant_t;
   inline constexpr sync_wait_with_variant_t sync_wait_with_variant{};
 } // namespace std::this_thread
