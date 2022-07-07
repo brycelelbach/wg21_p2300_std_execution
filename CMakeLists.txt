@@ -1,5 +1,10 @@
 cmake_minimum_required(VERSION 3.17.0)
 
+# Define the project
+file(STRINGS "std_execution.bs" STD_EXECUTION_BS_REVISION_LINE REGEX "Revision: [0-9]+")
+string(REGEX REPLACE "Revision: ([0-9]+)" "\\1" STD_EXECUTION_BS_REVISION ${STD_EXECUTION_BS_REVISION_LINE})
+project(P2300 LANGUAGES CXX VERSION "0.${STD_EXECUTION_BS_REVISION}.0")
+
 option(P2300_ENABLE_CONAN "Enable Conan integration" ON)
 option(P2300_ENABLE_TESTS "Enable tests" ON)
 option(P2300_ENABLE_EXAMPLES "Enable examples" ON)
@@ -12,12 +17,6 @@ if (P2300_ENABLE_CONAN)
       message(FATAL_ERROR "The file conanbuildinfo.cmake doesn't exist, you have to run conan install first")
   endif ()
 endif ()
-
-# Define the project
-file(STRINGS "std_execution.bs" STD_EXECUTION_BS_REVISION_LINE REGEX "Revision: [0-9]+")
-string(REGEX REPLACE "Revision: ([0-9]+)" "\\1" STD_EXECUTION_BS_REVISION ${STD_EXECUTION_BS_REVISION_LINE})
-# TODO: Does this need to happen before the conan stuff is set up?
-project(P2300 LANGUAGES CXX VERSION "0.${STD_EXECUTION_BS_REVISION}.0")
 
 # Print CMake configuration
 message(STATUS "System           : ${CMAKE_SYSTEM}")
