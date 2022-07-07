@@ -17,7 +17,7 @@ endif ()
 file(STRINGS "std_execution.bs" STD_EXECUTION_BS_REVISION_LINE REGEX "Revision: [0-9]+")
 string(REGEX REPLACE "Revision: ([0-9]+)" "\\1" STD_EXECUTION_BS_REVISION ${STD_EXECUTION_BS_REVISION_LINE})
 # TODO: Does this need to happen before the conan stuff is set up?
-project(P2300-dev LANGUAGES CXX VERSION "0.${STD_EXECUTION_BS_REVISION}.0")
+project(P2300 LANGUAGES CXX VERSION "0.${STD_EXECUTION_BS_REVISION}.0")
 
 # Print CMake configuration
 message(STATUS "System           : ${CMAKE_SYSTEM}")
@@ -75,6 +75,46 @@ target_compile_options(P2300 INTERFACE
                        )
 
 add_library(P2300::p2300 ALIAS P2300)
+
+# Install the library
+include(CMakePackageConfigHelpers)
+include(GNUInstallDirs)
+
+# Generate a config file
+configure_package_config_file(P2300Config.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/P2300Config.cmake"
+  INSTALL_DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/P2300")
+
+# Generate a version file
+write_basic_package_version_file(
+  "${CMAKE_CURRENT_BINARY_DIR}/P2300ConfigVersion.cmake"
+  VERSION ${PROJECT_VERSION}
+  COMPATIBILITY AnyNewerVersion)
+
+# Install the config and version files
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/P2300Config.cmake"
+              "${CMAKE_CURRENT_BINARY_DIR}/P2300ConfigVersion.cmake"
+        DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/P2300")
+
+# Export the P2300 target
+install(
+  TARGETS P2300
+  EXPORT P2300Export
+)
+
+# Install headers
+install(
+  DIRECTORY include/
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+)
+
+# Install configuration file for targets
+install(
+  EXPORT P2300Export
+  NAMESPACE P2300::
+  FILE P2300Targets.cmake
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/P2300
+)
 
 # Support target for examples and tests
 add_library(P2300_executable_flags INTERFACE)
