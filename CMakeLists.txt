@@ -1,24 +1,30 @@
 cmake_minimum_required(VERSION 3.17.0)
 
-# Define the project
-project(P2300-dev LANGUAGES CXX)
+option(P2300_ENABLE_CONAN "Enable Conan integration" ON)
 
-if (EXISTS ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-    include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
-    conan_basic_setup(TARGETS)
-else ()
-    message(ERROR "The file conanbuildinfo.cmake doesn't exist, you have to run conan install first")
+if (P2300_ENABLE_CONAN)
+  if (EXISTS ${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+      include(${CMAKE_BINARY_DIR}/conanbuildinfo.cmake)
+      conan_basic_setup(TARGETS)
+  else ()
+      message(FATAL_ERROR "The file conanbuildinfo.cmake doesn't exist, you have to run conan install first")
+  endif ()
 endif ()
 
-# Set the version of the project
-project(P2300-dev VERSION "${CONAN_PACKAGE_VERSION}")
+# Define the project
+file(STRINGS "std_execution.bs" STD_EXECUTION_BS_REVISION_LINE REGEX "Revision: [0-9]+")
+string(REGEX REPLACE "Revision: ([0-9]+)" "\\1" STD_EXECUTION_BS_REVISION ${STD_EXECUTION_BS_REVISION_LINE})
+# TODO: Does this need to happen before the conan stuff is set up?
+project(P2300-dev LANGUAGES CXX VERSION "0.${STD_EXECUTION_BS_REVISION}.0")
 
 # Print CMake configuration
 message(STATUS "System           : ${CMAKE_SYSTEM}")
 message(STATUS "System name      : ${CMAKE_SYSTEM_NAME}")
 message(STATUS "System ver       : ${CMAKE_SYSTEM_VERSION}")
-message(STATUS "Conan compiler   : ${CONAN_SETTINGS_COMPILER} ${CONAN_SETTINGS_COMPILER_VERSION}")
-message(STATUS "Conan libcxx     : ${CONAN_SETTINGS_COMPILER_LIBCXX}")
+if (P2300_USE_CONAN)
+  message(STATUS "Conan compiler   : ${CONAN_SETTINGS_COMPILER} ${CONAN_SETTINGS_COMPILER_VERSION}")
+  message(STATUS "Conan libcxx     : ${CONAN_SETTINGS_COMPILER_LIBCXX}")
+endif ()
 message(STATUS)
 
 # The main library
