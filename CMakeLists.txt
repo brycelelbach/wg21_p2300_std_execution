@@ -74,8 +74,6 @@ target_compile_options(P2300 INTERFACE
                        -fcoroutines>
                        )
 
-add_library(P2300::p2300 ALIAS P2300)
-
 # Install the library
 include(CMakePackageConfigHelpers)
 include(GNUInstallDirs)
