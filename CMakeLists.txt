@@ -124,7 +124,7 @@ target_compile_options(P2300_executable_flags INTERFACE
                        /W4>)
 
 # Silence warnings with GCC
-target_compile_options(P2300 INTERFACE
+target_compile_options(P2300_executable_flags INTERFACE
                        $<$<BOOL:$<CXX_COMPILER_ID:GNU>>:
                        -Wno-non-template-friend>
                        )
