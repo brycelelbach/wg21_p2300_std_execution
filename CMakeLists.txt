@@ -48,9 +48,10 @@ set_target_properties(P2300 PROPERTIES
                       SOVERSION "${P2300_VERSION_MAJOR}")
 
 # Declare the public include directories
+include(GNUInstallDirs)
 target_include_directories(P2300 INTERFACE
                            $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include/>
-                           $<INSTALL_INTERFACE:include>
+                           $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
                            )
 
 # Ensure that we link with the threading library
@@ -75,7 +76,6 @@ target_compile_options(P2300 INTERFACE
 
 # Install the library
 include(CMakePackageConfigHelpers)
-include(GNUInstallDirs)
 
 # Generate a config file
 configure_package_config_file(P2300Config.cmake.in
