@@ -100,26 +100,34 @@ int main() {
     auto buf = reinterpret_cast<char*>(&buffer[0]);
 
     // A sender that just calls the legacy read function
-    auto snd_read = ex::just(sock, buf, buffer.size()) | ex::then(legacy_read_from_socket);
+    auto snd_read =
+        ex::just(sock, buf, buffer.size())
+      | ex::then(legacy_read_from_socket);
+
+    // process the incoming data
+    auto process_data =
+        ex::then([buf](int read_len) { process_read_data(buf, read_len); });
+
     // The entire flow
     auto snd =
-        // start by reading data on the I/O thread
-        ex::on(io_sched, std::move(snd_read)) // TODO: doesn't work apple-clang-13
-        // ex::on(io_sched, ex::just(size_t(13)))
+        // start by reading data
+        std::move(snd_read)
         // do the processing on the worker threads pool
-        | ex::transfer(work_sched)
-        // process the incoming data (on worker threads)
-        | ex::then([buf](int read_len) { process_read_data(buf, read_len); })
+        | ex::on(work_sched, process_data)
         // done
         ;
 
+    // Start the work on the io scheduler, when done, transition back to the
+    // current thread;
+    auto work =
+        ex::on(io_sched, std::move(snd))
+      | ex::complete_on(work_sched);
+
     // execute the whole flow asynchronously
-    scope.spawn(std::move(snd));
+    scope.spawn(std::move(work));
   }
 
   (void) std::this_thread::sync_wait(scope.empty());
-
-  return 0;
 }
 
 #endif

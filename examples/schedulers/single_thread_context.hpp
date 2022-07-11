@@ -32,7 +32,15 @@ namespace example {
     {}
 
     ~single_thread_context() {
+      request_stop();
+      join();
+    }
+
+    void request_stop() noexcept {
       loop_.finish();
+    }
+
+    void join() noexcept {
       thread_.join();
     }
 

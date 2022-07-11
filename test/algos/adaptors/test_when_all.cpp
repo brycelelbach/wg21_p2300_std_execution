@@ -176,7 +176,7 @@ TEST_CASE("when_all cancels remaining children if error is detected", "[adaptors
               cancelled = true;
               return ex::just();
             }) //
-  );
+  ) | ex::complete_on(inline_scheduler{});
   auto op = ex::connect(std::move(snd), expect_error_receiver{});
   ex::start(op);
   // The first child will complete; the third one will be cancelled
@@ -206,7 +206,7 @@ TEST_CASE("when_all cancels remaining children if cancel is detected", "[adaptor
               cancelled = true;
               return ex::just();
             }) //
-  );
+  ) | ex::complete_on(inline_scheduler{});
   auto op = ex::connect(std::move(snd), expect_stopped_receiver{});
   ex::start(op);
   // The first child will complete; the third one will be cancelled

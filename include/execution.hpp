@@ -1559,13 +1559,17 @@ namespace std::execution {
             , __op_state_(connect((_Sender&&) __sndr, __receiver{this}))
           {}
         };
+      template <class _Sender, class _Receiver>
+        __operation(_Sender, _Receiver) -> __operation<__x<_Sender>, __x<_Receiver>>;
+
     } // namespace __impl
 
     struct __submit_t {
       template <receiver _Receiver, sender_to<_Receiver> _Sender>
       void operator()(_Sender&& __sndr, _Receiver&& __rcvr) const noexcept(false) {
-        start((new __impl::__operation<__x<_Sender>, __x<decay_t<_Receiver>>>{
-            (_Sender&&) __sndr, (_Receiver&&) __rcvr})->__op_state_);
+        auto *const __op =
+          new __impl::__operation{(_Sender&&) __sndr, (_Receiver&&) __rcvr};
+        start(__op->__op_state_);
       }
     };
   } // namespace __submit_
@@ -1596,6 +1600,7 @@ namespace std::execution {
         noexcept(nothrow_tag_invocable<start_detached_t, _Sender>) {
         (void) tag_invoke(start_detached_t{}, (_Sender&&) __sndr);
       }
+
       template <sender _Sender>
         requires (!tag_invocable<start_detached_t, _Sender>) &&
           sender_to<_Sender, __impl::__detached_receiver>
@@ -1738,6 +1743,13 @@ namespace std::execution {
       move_constructible<remove_cvref_t<_T>> &&
       constructible_from<remove_cvref_t<_T>, _T>;
 
+  template <class _T, class _Sender>
+    concept __sender_adaptor_closure_for =
+      __sender_adaptor_closure<_T> &&
+      sender<remove_cvref_t<_Sender>> &&
+      __callable<_T, remove_cvref_t<_Sender>> &&
+      sender<__call_result_t<_T, remove_cvref_t<_Sender>>>;
+
   namespace __closure {
     template <class _T0, class _T1>
     struct __compose : sender_adaptor_closure<__compose<_T0, _T1>> {
@@ -1766,8 +1778,7 @@ namespace std::execution {
       return {(_T0&&) __t0, (_T1&&) __t1};
     }
 
-    template <sender _Sender, __sender_adaptor_closure _Closure>
-      requires __callable<_Closure, _Sender>
+    template <sender _Sender, __sender_adaptor_closure_for<_Sender> _Closure>
     __call_result_t<_Closure, _Sender> operator|(_Sender&& __sndr, _Closure&& __clsur) {
       return ((_Closure&&) __clsur)((_Sender&&) __sndr);
     }
@@ -4098,6 +4109,42 @@ namespace std::execution {
               completion_signatures<set_error_t(exception_ptr)>>,
             __value_t>;
       };
+    template <class _Scheduler, class _Sender>
+      __sender(_Scheduler, _Sender) -> __sender<__x<_Scheduler>, __x<_Sender>>;
+
+    template <class _SchedulerId, class _SenderId>
+      struct __start_on_fn {
+        using _Scheduler = __t<_SchedulerId>;
+        using _Sender = __t<_SenderId>;
+        _Scheduler __sched_;
+        _Sender __sndr_;
+        auto operator()(auto&& __old_sched) {
+          return __sender{(_Scheduler&&) __sched_, (_Sender&&) __sndr_}
+            | transfer((decltype(__old_sched)) __old_sched);
+        }
+      };
+    template <class _Scheduler, class _Sender>
+      __start_on_fn(_Scheduler, _Sender)
+        -> __start_on_fn<__x<_Scheduler>, __x<_Sender>>;
+
+    template <class _SenderId, class _SchedulerId, class _ClosureId>
+      struct __complete_on_fn {
+        using _Sender = __t<_SenderId>;
+        using _Scheduler = __t<_SchedulerId>;
+        using _Closure = __t<_ClosureId>;
+        _Sender __sndr_;
+        _Scheduler __sched_;
+        _Closure __closure_;
+        auto operator()(auto&& __old_sched) {
+          return std::move(__sndr_)
+            | transfer(std::move(__sched_))
+            | std::move(__closure_)
+            | transfer(std::move(__old_sched));
+        }
+      };
+    template <class _Sender, class _Scheduler, class _Closure>
+      __complete_on_fn(_Sender, _Scheduler, _Closure)
+        -> __complete_on_fn<__x<_Sender>, __x<_Scheduler>, __x<_Closure>>;
 
     struct on_t {
       template <scheduler _Scheduler, sender _Sender>
@@ -4108,10 +4155,26 @@ namespace std::execution {
         return tag_invoke(*this, (_Scheduler&&) __sched, (_Sender&&) __sndr);
       }
 
+      // TODO wrap this in its own sender with a custom tag type
       template <scheduler _Scheduler, sender _Sender>
-      auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const
-        -> __sender<__x<decay_t<_Scheduler>>, __x<decay_t<_Sender>>> {
-        return {(_Scheduler&&) __sched, (_Sender&&) __sndr};
+      auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const {
+        return let_value(
+          read_with_default(get_scheduler, __sched),
+          __start_on_fn{(_Scheduler&&) __sched, (_Sender&&) __sndr});
+      }
+
+      // TODO wrap this in its own sender with a custom tag type
+      template <sender _Sender, scheduler _Scheduler, __sender_adaptor_closure_for<_Sender> _Closure>
+      auto operator()(_Sender&& __sndr, _Scheduler&& __sched, _Closure __closure) const {
+        return let_value(
+          read_with_default(get_scheduler, __sched),
+          __complete_on_fn{(_Sender&&) __sndr, __sched, (_Closure&&) __closure});
+      }
+
+      template <scheduler _Scheduler, __sender_adaptor_closure _Closure>
+      auto operator()(_Scheduler&& __sched, _Closure __closure) const
+        -> __binder_back<on_t, decay_t<_Scheduler>, _Closure> {
+        return {{}, {}, {(_Scheduler&&) __sched, (_Closure&&) __closure}};
       }
     };
   } // namespace __on

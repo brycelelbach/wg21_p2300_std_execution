@@ -268,13 +268,9 @@ namespace example {
 
   inline task_base* static_thread_pool::thread_state::pop() {
     std::unique_lock lk{mut_};
-    while (queue_.empty()) {
-      if (stopRequested_) {
-        return nullptr;
-      }
-      cv_.wait(lk);
-    }
-    return queue_.pop_front();
+    // Wait until there is an item in the queue or stop has been requested
+    cv_.wait(lk, [this]() noexcept { return !queue_.empty() || stopRequested_; });
+    return queue_.empty() ? nullptr : queue_.pop_front();
   }
 
   inline bool static_thread_pool::thread_state::try_push(task_base* task) {
