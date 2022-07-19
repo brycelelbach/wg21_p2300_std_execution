@@ -4494,7 +4494,8 @@ namespace std::this_thread {
             execution::__completion_scheduler_for<_Sender, execution::set_value_t>,
             _Sender>,
           optional<__impl::__sync_wait_with_variant_result_t<_Sender>>>,
-          "");
+          "The type of tag_invoke(execution::sync_wait_with_variant, execution::get_completion_scheduler, S) "
+          "must be sync-wait-with-variant-type<S, sync-wait-env>");
 
         auto __sched =
           execution::get_completion_scheduler<execution::set_value_t>(__sndr);
@@ -4513,7 +4514,8 @@ namespace std::this_thread {
         static_assert(std::is_same_v<
           tag_invoke_result_t<sync_wait_with_variant_t, _Sender>,
           optional<__impl::__sync_wait_with_variant_result_t<_Sender>>>,
-          "");
+          "The type of tag_invoke(execution::sync_wait_with_variant, S) "
+          "must be sync-wait-with-variant-type<S, sync-wait-env>");
 
         return tag_invoke(sync_wait_with_variant_t{}, (_Sender&&) __sndr);
       }
