@@ -288,4 +288,4 @@ TEST_CASE("sync_wait_with_variant can be customized without scheduler", "[consum
   CHECK(std::get<0>(std::get<0>(res.value())) == std::make_tuple(std::string{"ciao_multi"}));
 }
 
-#endif    
+#endif
