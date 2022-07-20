@@ -243,7 +243,7 @@ namespace std {
     };
 
   template <class _T>
-    struct __constant {
+    struct __mconst {
       template <class...>
         using __f = _T;
     };

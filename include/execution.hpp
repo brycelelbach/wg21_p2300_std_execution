@@ -491,7 +491,7 @@ namespace std::execution {
         __if_c<
           sizeof...(_Ts) != 0,
           __transform<__q1<decay_t>, __munique<__q<variant>>>,
-          __constant<__not_a_variant>>,
+          __mconst<__not_a_variant>>,
         _Ts...>;
 
   template <class... _Ts>
@@ -838,7 +838,7 @@ namespace std::execution {
 
   template <class _T>
     using __domain_of_t =
-      __call_result_t<get_domain_t, env_of_t<_T>>;
+      __call_result_t<get_domain_t, _T>;
 
   template <class _SchedulerProvider>
     concept __scheduler_provider =
@@ -1094,7 +1094,7 @@ namespace std::execution {
         sender<_Sender, env_of_t<_Receiver>> &&
         __receiver_from<_Receiver, _Sender> &&
         __callable<get_domain_t, env_of_t<_Receiver>> &&
-        tag_invocable<connect_t, __domain_of_t<_Receiver>, _Sender, _Receiver>;
+        tag_invocable<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>;
 
     template <class _Sender, class _Receiver>
       concept __connectable_with_tag_invoke =
@@ -1106,10 +1106,10 @@ namespace std::execution {
       template <class _Sender, class _Receiver>
         requires __connectable_with_domain<_Sender, _Receiver>
       auto operator()(_Sender&& __sndr, _Receiver&& __rcvr) const
-        noexcept(nothrow_tag_invocable<connect_t, __domain_of_t<_Receiver>, _Sender, _Receiver>)
-        -> tag_invoke_result_t<connect_t, __domain_of_t<_Receiver>, _Sender, _Receiver> {
+        noexcept(nothrow_tag_invocable<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>)
+        -> tag_invoke_result_t<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver> {
         static_assert(
-          operation_state<tag_invoke_result_t<connect_t, __domain_of_t<_Receiver>, _Sender, _Receiver>>,
+          operation_state<tag_invoke_result_t<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>>,
           "execution::connect(sender, receiver) must return a type that "
           "satisfies the operation_state concept");
         return tag_invoke(connect_t{}, get_domain(get_env(__rcvr)), (_Sender&&) __sndr, (_Receiver&&) __rcvr);
@@ -3609,7 +3609,7 @@ namespace std::execution {
 
         __operation1(_Scheduler __sched, _CvrefSender&& __sndr, __decays_to<_Receiver> auto&& __rcvr)
           : __sched_(__sched)
-          , __rcvr_((decltype(__rcvr)&&) __rcvr)
+          , __rcvr_((decltype(__rcvr)) __rcvr)
           , __state1_(connect((_CvrefSender&&) __sndr, __receiver1_t{this})) {}
         __operation1(__operation1&&) = delete;
 
@@ -3629,6 +3629,7 @@ namespace std::execution {
         _Sender __sndr_;
 
         template <__decays_to<__sender> _Self, class _Receiver>
+          // BUGBUG this constraint is not exactly correct
           requires sender_to<__member_t<_Self, _Sender>, _Receiver>
         friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __rcvr)
             -> __operation1<_SchedulerId, __x<__member_t<_Self, _Sender>>, __x<decay_t<_Receiver>>> {
@@ -3968,27 +3969,54 @@ namespace std::execution {
   namespace __on {
     struct on_t;
 
+    template <class _SchedulerId, class _ReceiverId>
+      struct __operation_base;
+
     template <class _SchedulerId, class _SenderId, class _ReceiverId>
       struct __operation;
 
-    template <class _SchedulerId, class _SenderId, class _ReceiverId>
+    template <class _Scheduler, class _Env>
+      using __env_with_domain_t =
+        make_env_t<
+          _Env,
+          with_t<get_scheduler_t, _Scheduler>,
+          with_t<get_domain_t, __domain_of_t<_Scheduler>>>;
+
+    template <class _Scheduler, class _Env>
+      using __env_t =
+        __minvoke2<
+          __if_c<
+            __callable<get_domain_t, _Scheduler>,
+            __q2<__env_with_domain_t>,
+            __mconst<make_env_t<_Env, with_t<get_scheduler_t, _Scheduler>>>>,
+          _Scheduler,
+          _Env>;
+
+    template <class _SchedulerId, class _ReceiverId>
       struct __receiver_ref
-        : receiver_adaptor<__receiver_ref<_SchedulerId, _SenderId, _ReceiverId>> {
+        : receiver_adaptor<__receiver_ref<_SchedulerId, _ReceiverId>> {
         using _Scheduler = __t<_SchedulerId>;
-        using _Sender = __t<_SenderId>;
         using _Receiver = __t<_ReceiverId>;
-        __operation<_SchedulerId, _SenderId, _ReceiverId>* __op_state_;
+        __operation_base<_SchedulerId, _ReceiverId>* __op_state_;
         _Receiver&& base() && noexcept {
           return (_Receiver&&) __op_state_->__rcvr_;
         }
         const _Receiver& base() const & noexcept {
           return __op_state_->__rcvr_;
         }
-        auto get_env() const
-          -> make_env_t<env_of_t<_Receiver>, with_t<get_scheduler_t, _Scheduler>> {
-          return make_env(
-            execution::get_env(this->base()),
-            with(get_scheduler, __op_state_->__scheduler_));
+        __env_t<_Scheduler, env_of_t<_Receiver>> get_env() const {
+          // If the scheduler has a domain, propagate that to on's sender
+          // by encoding it in the receiver connected to it
+          if constexpr (__callable<get_domain_t, _Scheduler>) {
+            return make_env(
+              execution::get_env(this->base()),
+              with(get_scheduler, __op_state_->__scheduler_),
+              with(get_domain, __domain_of_t<_Scheduler>{}));
+          } else {
+            return make_env(
+              execution::get_env(this->base()),
+              with(get_scheduler, __op_state_->__scheduler_));
+          }
         }
       };
 
@@ -3998,8 +4026,7 @@ namespace std::execution {
         using _Scheduler = __t<_SchedulerId>;
         using _Sender = __t<_SenderId>;
         using _Receiver = __t<_ReceiverId>;
-        using __receiver_ref_t =
-          __receiver_ref<_SchedulerId, _SenderId, _ReceiverId>;
+        using __receiver_ref_t = __receiver_ref<_SchedulerId, _ReceiverId>;
         __operation<_SchedulerId, _SenderId, _ReceiverId>* __op_state_;
         _Receiver&& base() && noexcept {
           return (_Receiver&&) __op_state_->__rcvr_;
@@ -4026,13 +4053,21 @@ namespace std::execution {
         }
       };
 
+    template <class _SchedulerId, class _ReceiverId>
+      struct __operation_base {
+        using _Scheduler = __t<_SchedulerId>;
+        using _Receiver = __t<_ReceiverId>;
+        _Scheduler __scheduler_;
+        _Receiver __rcvr_;
+      };
+
     template <class _SchedulerId, class _SenderId, class _ReceiverId>
-      struct __operation {
+      struct __operation : __operation_base<_SchedulerId, _ReceiverId> {
         using _Scheduler = __t<_SchedulerId>;
         using _Sender = __t<_SenderId>;
         using _Receiver = __t<_ReceiverId>;
         using __receiver_t = __receiver<_SchedulerId, _SenderId, _ReceiverId>;
-        using __receiver_ref_t = __receiver_ref<_SchedulerId, _SenderId, _ReceiverId>;
+        using __receiver_ref_t = __receiver_ref<_SchedulerId, _ReceiverId>;
 
         friend void tag_invoke(start_t, __operation& __self) noexcept {
           start(std::get<0>(__self.__data_));
@@ -4040,21 +4075,20 @@ namespace std::execution {
 
         template <class _Sender2, class _Receiver2>
         __operation(_Scheduler __sched, _Sender2&& __sndr, _Receiver2&& __rcvr)
-          : __data_{in_place_index<0>, __conv{[&, this]{
+          : __operation_base<_SchedulerId, _ReceiverId>{
+              (_Scheduler&&) __sched,
+              (_Receiver2&&) __rcvr}
+          , __data_{in_place_index<0>, __conv{[&, this]{
               return connect(schedule(__sched),
                               __receiver_t{{}, this});
             }}}
-          , __scheduler_((_Scheduler&&) __sched)
-          , __sndr_((_Sender2&&) __sndr)
-          , __rcvr_((_Receiver2&&) __rcvr) {}
+          , __sndr_((_Sender2&&) __sndr) {}
         __operation(__operation&&) = delete;
 
         variant<
             connect_result_t<schedule_result_t<_Scheduler>, __receiver_t>,
             connect_result_t<_Sender, __receiver_ref_t>> __data_;
-        _Scheduler __scheduler_;
         _Sender __sndr_;
-        _Receiver __rcvr_;
       };
 
     template <class _SchedulerId, class _SenderId>
@@ -4064,7 +4098,7 @@ namespace std::execution {
         using descriptor_t = sender_descriptor_t<on_t(_Sender)>;
         template <class _ReceiverId>
           using __receiver_ref_t =
-            __receiver_ref<_SchedulerId, _SenderId, _ReceiverId>;
+            __receiver_ref<_SchedulerId, _ReceiverId>;
         template <class _ReceiverId>
           using __receiver_t =
             __receiver<_SchedulerId, _SenderId, _ReceiverId>;
@@ -4105,7 +4139,7 @@ namespace std::execution {
             _Env,
             make_completion_signatures<
               __member_t<_Self, _Sender>,
-              make_env_t<_Env, with_t<get_scheduler_t, _Scheduler>>,
+              __env_t<_Env, _Scheduler>,
               completion_signatures<set_error_t(exception_ptr)>>,
             __value_t>;
       };
@@ -4118,9 +4152,18 @@ namespace std::execution {
         using _Sender = __t<_SenderId>;
         _Scheduler __sched_;
         _Sender __sndr_;
-        auto operator()(auto&& __old_sched) {
-          return __sender{(_Scheduler&&) __sched_, (_Sender&&) __sndr_}
-            | transfer((decltype(__old_sched)) __old_sched);
+
+        template <class _Self, class _OldScheduler>
+          static auto __call(_Self&& __self, _OldScheduler __old_sched) {
+            return __sender{((_Self&&) __self).__sched_, ((_Self&&) __self).__sndr_}
+              | transfer(__old_sched);
+          }
+
+        auto operator()(auto __old_sched) && {
+          return __call(std::move(*this), __old_sched);
+        }
+        auto operator()(auto __old_sched) const & {
+          return __call(*this, __old_sched);
         }
       };
     template <class _Scheduler, class _Sender>
@@ -4135,11 +4178,22 @@ namespace std::execution {
         _Sender __sndr_;
         _Scheduler __sched_;
         _Closure __closure_;
-        auto operator()(auto&& __old_sched) {
-          return std::move(__sndr_)
-            | transfer(std::move(__sched_))
-            | std::move(__closure_)
-            | transfer(std::move(__old_sched));
+
+        template <class _Self, class _OldScheduler>
+          static auto __call(_Self&& __self, _OldScheduler __old_sched) {
+            return ((_Self&&) __self).__sndr_
+              | write(with(get_scheduler, __old_sched))
+              | transfer(__self.__sched_)
+              | ((_Self&&) __self).__closure_
+              | write(with(get_scheduler, __self.__sched_))
+              | transfer(__old_sched);
+          }
+
+        auto operator()(auto __old_sched) && {
+          return __call(std::move(*this), __old_sched);
+        }
+        auto operator()(auto __old_sched) const & {
+          return __call(*this, __old_sched);
         }
       };
     template <class _Sender, class _Scheduler, class _Closure>
