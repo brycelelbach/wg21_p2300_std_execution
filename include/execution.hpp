@@ -4194,6 +4194,10 @@ namespace std::execution {
         return __impl::__sender<__x<decay_t<_Senders>>...>{
             (_Senders&&) __sndrs...};
       }
+
+      auto operator()() const noexcept {
+        return just();
+      }
     };
 
     struct when_all_with_variant_t {
