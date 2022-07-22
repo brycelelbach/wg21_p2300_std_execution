@@ -172,19 +172,4 @@ TEST_CASE("on keeps sends_stopped from scheduler's sender", "[adaptors][on]") {
   check_sends_stopped<true>(ex::on(sched3, ex::just(3)));
 }
 
-// Return a different sender when we invoke this custom defined on implementation
-using just_string_sender_t = decltype(ex::just(std::string{}));
-auto tag_invoke(decltype(ex::on), inline_scheduler sched, just_string_sender_t) {
-  return ex::just(std::string{"Hello, world!"});
-}
-
-TEST_CASE("on can be customized", "[adaptors][on]") {
-  // The customization will return a different value
-  auto snd = ex::on(inline_scheduler{}, ex::just(std::string{"world"}));
-  std::string res;
-  auto op = ex::connect(std::move(snd), expect_value_receiver_ex<std::string>(&res));
-  ex::start(op);
-  REQUIRE(res == "Hello, world!");
-}
-
 #endif

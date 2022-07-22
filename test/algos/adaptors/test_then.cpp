@@ -160,18 +160,4 @@ TEST_CASE("then keeps sends_stopped from input sender", "[adaptors][then]") {
       ex::just() | ex::transfer(sched3) | ex::then([] {}));
 }
 
-// Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
-template <typename Fun>
-auto tag_invoke(ex::then_t, inline_scheduler sched, my_string_sender_t, Fun) {
-  return ex::just(std::string{"hallo"});
-}
-
-TEST_CASE("then can be customized", "[adaptors][then]") {
-  // The customization will return a different value
-  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
-             | ex::then([](std::string x) { return x + ", world"; });
-  wait_for_value(std::move(snd), std::string{"hallo"});
-}
-
 #endif

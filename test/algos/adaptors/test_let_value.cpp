@@ -286,18 +286,4 @@ TEST_CASE("let_value keeps sends_stopped from input sender", "[adaptors][let_val
       ex::just() | ex::transfer(sched3) | ex::let_value([] { return ex::just(); }));
 }
 
-// Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
-template <typename Fun>
-auto tag_invoke(ex::let_value_t, inline_scheduler sched, my_string_sender_t, Fun) {
-  return ex::just(std::string{"hallo"});
-}
-
-TEST_CASE("let_value can be customized", "[adaptors][let_value]") {
-  // The customization will return a different value
-  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
-             | ex::let_value([](std::string& x) { return ex::just(x + ", world"); });
-  wait_for_value(std::move(snd), std::string{"hallo"});
-}
-
 #endif

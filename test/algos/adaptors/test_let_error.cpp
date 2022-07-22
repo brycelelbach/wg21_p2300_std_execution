@@ -313,18 +313,4 @@ TEST_CASE("let_error keeps sends_stopped from input sender", "[adaptors][let_err
       ex::just() | ex::transfer(sched3) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
 }
 
-// Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
-template <typename Fun>
-auto tag_invoke(ex::let_error_t, inline_scheduler sched, my_string_sender_t, Fun) {
-  return ex::just(std::string{"what error?"});
-}
-
-TEST_CASE("let_error can be customized", "[adaptors][let_error]") {
-  // The customization will return a different value
-  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
-             | ex::let_error([](std::exception_ptr) { return ex::just(std::string{"err"}); });
-  wait_for_value(std::move(snd), std::string{"what error?"});
-}
-
 #endif

@@ -200,18 +200,4 @@ TEST_CASE("let_stopped overrides sends_stopped from input sender", "[adaptors][l
       | ex::let_stopped([] { return ex::just_stopped(); }));
 }
 
-// Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
-template <typename Fun>
-auto tag_invoke(ex::let_stopped_t, inline_scheduler sched, my_string_sender_t, Fun) {
-  return ex::just(std::string{"Don't stop me now"});
-}
-
-TEST_CASE("let_stopped can be customized", "[adaptors][let_stopped]") {
-  // The customization will return a different value
-  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
-             | ex::let_stopped([] { return ex::just(std::string{"stopped"}); });
-  wait_for_value(std::move(snd), std::string{"Don't stop me now"});
-}
-
 #endif
