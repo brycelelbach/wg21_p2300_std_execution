@@ -200,7 +200,7 @@ struct val_type3 {
 };
 using just_val1_sender_t = decltype(ex::just(val_type1{0}));
 using just_val2_sender_t = decltype(ex::just(val_type2{0}));
-using just_val3_sender_t = decltype(ex::transfer_just(impulse_scheduler{}, val_type3{0}));
+using just_val3_sender_t = decltype(ex::just(val_type3{0}) | ex::transfer(impulse_scheduler{}));
 
 // Customization of transfer
 // Return a different sender when we invoke this custom defined transfer implementation
@@ -218,7 +218,7 @@ auto tag_invoke(decltype(ex::schedule_from), inline_scheduler sched, just_val2_s
 // Return a different sender when we invoke this custom defined transfer implementation
 auto tag_invoke(decltype(ex::transfer), impulse_scheduler /*sched_src*/, just_val3_sender_t,
     inline_scheduler sched_dest) {
-  return ex::transfer_just(sched_dest, val_type3{61});
+  return ex::just(val_type3{61}) | ex::transfer(sched_dest);
 }
 
 TEST_CASE("transfer can be customized", "[adaptors][transfer]") {
@@ -243,7 +243,7 @@ TEST_CASE("transfer can be customized with two schedulers", "[adaptors][transfer
   // The customization will return a different value
   ex::scheduler auto sched_src = impulse_scheduler{};
   ex::scheduler auto sched_dest = inline_scheduler{};
-  auto snd = ex::transfer_just(sched_src, val_type3{1}) //
+  auto snd = ex::just(val_type3{1}) | ex::transfer(sched_src) //
              | ex::transfer(sched_dest);
   val_type3 res{0};
   auto op = ex::connect(std::move(snd), expect_value_receiver_ex<val_type3>(&res));

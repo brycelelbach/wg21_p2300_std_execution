@@ -102,7 +102,6 @@ set(test_sourceFiles
     test/concepts/test_concepts_sender.cpp
     test/types/test_type_async_scope.cpp
     test/algos/factories/test_just.cpp
-    test/algos/factories/test_transfer_just.cpp
     test/algos/factories/test_just_error.cpp
     test/algos/factories/test_just_stopped.cpp
     test/algos/adaptors/test_on.cpp
@@ -117,7 +116,6 @@ set(test_sourceFiles
     test/algos/adaptors/test_bulk.cpp
     test/algos/adaptors/test_split.cpp
     test/algos/adaptors/test_when_all.cpp
-    test/algos/adaptors/test_transfer_when_all.cpp
     test/algos/adaptors/test_into_variant.cpp
     test/algos/adaptors/test_stopped_as_optional.cpp
     test/algos/adaptors/test_stopped_as_error.cpp

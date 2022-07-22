@@ -108,9 +108,9 @@ TEST_CASE("when_all completes when children complete", "[adaptors][when_all]") {
   bool called{false};
   ex::sender auto snd =                 //
       ex::when_all(                     //
-          ex::transfer_just(sched, 11), //
-          ex::transfer_just(sched, 13), //
-          ex::transfer_just(sched, 17)  //
+          ex::just(11) | ex::transfer(sched), //
+          ex::just(13) | ex::transfer(sched), //
+          ex::just(17) | ex::transfer(sched)  //
           )                             //
       | ex::then([&](int a, int b, int c) {
           called = true;
@@ -143,7 +143,7 @@ TEST_CASE(
   error_scheduler sched;
   ex::sender auto snd = ex::when_all( //
       ex::just(2),                    //
-      ex::transfer_just(sched, 5),    //
+      ex::just(5) | ex::transfer(sched),    //
       ex::just(7)                     //
   );
   auto op = ex::connect(std::move(snd), expect_error_receiver{});
@@ -154,7 +154,7 @@ TEST_CASE("when_all terminates with stopped if one child is cancelled", "[adapto
   stopped_scheduler sched;
   ex::sender auto snd = ex::when_all( //
       ex::just(2),                    //
-      ex::transfer_just(sched, 5),    //
+      ex::just(5) | ex::transfer(sched),    //
       ex::just(7)                     //
   );
   auto op = ex::connect(std::move(snd), expect_stopped_receiver{});
@@ -169,7 +169,7 @@ TEST_CASE("when_all cancels remaining children if error is detected", "[adaptors
   bool cancelled{false};
   ex::sender auto snd = ex::when_all(                                //
       ex::on(sched, ex::just()) | ex::then([&] { called1 = true; }), //
-      ex::on(sched, ex::transfer_just(err_sched, 5)),                //
+      ex::on(sched, ex::just(5) | ex::transfer(err_sched)),                //
       ex::on(sched, ex::just())                                      //
           | ex::then([&] { called3 = true; })                        //
           | ex::let_stopped([&] {
@@ -199,7 +199,7 @@ TEST_CASE("when_all cancels remaining children if cancel is detected", "[adaptor
   bool cancelled{false};
   ex::sender auto snd = ex::when_all(                                //
       ex::on(sched, ex::just()) | ex::then([&] { called1 = true; }), //
-      ex::on(sched, ex::transfer_just(stopped_sched, 5)),            //
+      ex::on(sched, ex::just(5) | ex::transfer(stopped_sched)),            //
       ex::on(sched, ex::just())                                      //
           | ex::then([&] { called3 = true; })                        //
           | ex::let_stopped([&] {

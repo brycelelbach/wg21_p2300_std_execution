@@ -102,7 +102,7 @@ TEST_CASE("let_stopped function is not called on regular flow", "[adaptors][let_
 TEST_CASE("let_stopped function is not called on error flow", "[adaptors][let_stopped]") {
   bool called{false};
   error_scheduler<int> sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) //
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) //
                         | ex::let_stopped([&] {
                             called = true;
                             return ex::just(0);
@@ -147,7 +147,7 @@ TEST_CASE("let_stopped has the error_type from the input sender if returning val
 }
 TEST_CASE("let_stopped adds to error_type of the input sender", "[adaptors][let_stopped]") {
   impulse_scheduler sched;
-  ex::sender auto in_snd = ex::transfer_just(sched, 11);
+  ex::sender auto in_snd = ex::just(11) | ex::transfer(sched);
   check_err_types<type_array<std::exception_ptr, int>>( //
       in_snd                                //
       | ex::let_stopped([] { return ex::just_error(0); }));
@@ -160,7 +160,7 @@ TEST_CASE("let_stopped adds to error_type of the input sender", "[adaptors][let_
 }
 TEST_CASE("let_stopped can be used instead of stopped_as_error", "[adaptors][let_stopped]") {
   impulse_scheduler sched;
-  ex::sender auto in_snd = ex::transfer_just(sched, 11);
+  ex::sender auto in_snd = ex::just(11) | ex::transfer(sched);
   check_val_types<type_array<type_array<int>>>(in_snd);
   check_err_types<type_array<std::exception_ptr>>(in_snd);
   check_sends_stopped<true>(in_snd);
@@ -179,29 +179,29 @@ TEST_CASE("let_stopped overrides sends_stopped from input sender", "[adaptors][l
 
   // Returning ex::just
   check_sends_stopped<false>(   //
-      ex::transfer_just(sched1) //
+      ex::just() | ex::transfer(sched1) //
       | ex::let_stopped([] { return ex::just(); }));
   check_sends_stopped<false>(   //
-      ex::transfer_just(sched2) //
+      ex::just() | ex::transfer(sched2) //
       | ex::let_stopped([] { return ex::just(); }));
   check_sends_stopped<false>(   //
-      ex::transfer_just(sched3) //
+      ex::just() | ex::transfer(sched3) //
       | ex::let_stopped([] { return ex::just(); }));
 
   // Returning ex::just_stopped
   check_sends_stopped<false>(   //
-      ex::transfer_just(sched1) //
+      ex::just() | ex::transfer(sched1) //
       | ex::let_stopped([] { return ex::just_stopped(); }));
   check_sends_stopped<true>(    //
-      ex::transfer_just(sched2) //
+      ex::just() | ex::transfer(sched2) //
       | ex::let_stopped([] { return ex::just_stopped(); }));
   check_sends_stopped<true>(    //
-      ex::transfer_just(sched3) //
+      ex::just() | ex::transfer(sched3) //
       | ex::let_stopped([] { return ex::just_stopped(); }));
 }
 
 // Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::transfer_just(inline_scheduler{}, std::string{}));
+using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
 template <typename Fun>
 auto tag_invoke(ex::let_stopped_t, inline_scheduler sched, my_string_sender_t, Fun) {
   return ex::just(std::string{"Don't stop me now"});
@@ -209,7 +209,7 @@ auto tag_invoke(ex::let_stopped_t, inline_scheduler sched, my_string_sender_t, F
 
 TEST_CASE("let_stopped can be customized", "[adaptors][let_stopped]") {
   // The customization will return a different value
-  auto snd = ex::transfer_just(inline_scheduler{}, std::string{"hello"}) //
+  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
              | ex::let_stopped([] { return ex::just(std::string{"stopped"}); });
   wait_for_value(std::move(snd), std::string{"Don't stop me now"});
 }

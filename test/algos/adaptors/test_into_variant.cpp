@@ -84,14 +84,14 @@ TEST_CASE("into_variant can be used with just_stopped", "[adaptors][into_variant
 
 TEST_CASE("into_variant forwards errors", "[adaptors][into_variant]") {
   error_scheduler sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) | ex::into_variant();
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) | ex::into_variant();
   auto op = ex::connect(std::move(snd), expect_error_receiver{});
   ex::start(op);
 }
 
 TEST_CASE("into_variant forwards cancellation", "[adaptors][into_variant]") {
   stopped_scheduler sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) | ex::into_variant();
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) | ex::into_variant();
   auto op = ex::connect(std::move(snd), expect_stopped_receiver{});
   ex::start(op);
 }
@@ -119,9 +119,9 @@ TEST_CASE("into_variant keeps error_types from input sender", "[adaptors][into_v
   error_scheduler sched2{};
 
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched1) | ex::into_variant());
+      ex::just() | ex::transfer(sched1) | ex::into_variant());
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched2) | ex::into_variant());
+      ex::just() | ex::transfer(sched2) | ex::into_variant());
   check_err_types<type_array<std::exception_ptr, int>>( //
       ex::just_error(-1) | ex::into_variant());
 }
@@ -130,9 +130,9 @@ TEST_CASE("into_variant keeps sends_stopped from input sender", "[adaptors][into
   error_scheduler sched2{};
 
   check_sends_stopped<false>( //
-      ex::transfer_just(sched1) | ex::into_variant());
+      ex::just() | ex::transfer(sched1) | ex::into_variant());
   check_sends_stopped<true>( //
-      ex::transfer_just(sched2) | ex::into_variant());
+      ex::just() | ex::transfer(sched2) | ex::into_variant());
   check_sends_stopped<true>( //
       ex::just_stopped() | ex::into_variant());
 }

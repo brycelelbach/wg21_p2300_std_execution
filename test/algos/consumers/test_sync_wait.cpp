@@ -65,7 +65,7 @@ TEST_CASE("sync_wait rethrows received exception", "[consumers][sync_wait]") {
   // Ensure that sync_wait will rethrow the error
   try {
     error_scheduler<std::exception_ptr> sched{eptr};
-    sync_wait(ex::transfer_just(sched, 19));
+    sync_wait(ex::just(19) | ex::transfer(sched));
     FAIL("exception not thrown?");
   } catch (const std::logic_error& e) {
     CHECK(std::string{e.what()} == "err");
@@ -77,7 +77,7 @@ TEST_CASE("sync_wait rethrows received exception", "[consumers][sync_wait]") {
 TEST_CASE("sync_wait handling error_code errors", "[consumers][sync_wait]") {
   try {
     error_scheduler<std::error_code> sched{std::make_error_code(std::errc::argument_out_of_domain)};
-    ex::sender auto snd = ex::transfer_just(sched, 19);
+    ex::sender auto snd = ex::just(19) | ex::transfer(sched);
     static_assert(std::invocable<decltype(sync_wait), decltype(snd)>);
     sync_wait(std::move(snd)); // doesn't work
     FAIL("expecting exception to be thrown");
@@ -91,7 +91,7 @@ TEST_CASE("sync_wait handling error_code errors", "[consumers][sync_wait]") {
 TEST_CASE("sync_wait handling non-exception errors", "[consumers][sync_wait]") {
   try {
     error_scheduler<std::string> sched{std::string{"err"}};
-    ex::sender auto snd = ex::transfer_just(sched, 19);
+    ex::sender auto snd = ex::just(19) | ex::transfer(sched);
     static_assert(std::invocable<decltype(sync_wait), decltype(snd)>);
     sync_wait(std::move(snd)); // doesn't work
     FAIL("expecting exception to be thrown");
@@ -104,7 +104,7 @@ TEST_CASE("sync_wait handling non-exception errors", "[consumers][sync_wait]") {
 
 TEST_CASE("sync_wait returns empty optional on cancellation", "[consumers][sync_wait]") {
   stopped_scheduler sched;
-  optional<tuple<int>> res = sync_wait(ex::transfer_just(sched, 19));
+  optional<tuple<int>> res = sync_wait(ex::just(19) | ex::transfer(sched));
   CHECK_FALSE(res.has_value());
 }
 
@@ -126,7 +126,7 @@ TEST_CASE("sync_wait works if signaled from a different thread", "[consumers][sy
     thread_started = true;
 
     // Wait for a result that is triggered by the impulse scheduler
-    optional<tuple<int>> res = sync_wait(ex::transfer_just(sched, 49));
+    optional<tuple<int>> res = sync_wait(ex::just(49) | ex::transfer(sched));
     CHECK(res.has_value());
     CHECK(std::get<0>(res.value()) == 49);
 
@@ -152,9 +152,9 @@ TEST_CASE(
   example::static_thread_pool pool{3};
   ex::scheduler auto sched = pool.get_scheduler();
   ex::sender auto snd = ex::when_all(                 //
-      ex::transfer_just(sched, 2) | ex::then(square), //
-      ex::transfer_just(sched, 3) | ex::then(square), //
-      ex::transfer_just(sched, 5) | ex::then(square)  //
+      ex::just(2) | ex::transfer(sched) | ex::then(square), //
+      ex::just(3) | ex::transfer(sched) | ex::then(square), //
+      ex::just(5) | ex::transfer(sched) | ex::then(square)  //
   );
   optional<tuple<int, int, int>> res = sync_wait(std::move(snd));
   CHECK(res.has_value());
@@ -163,7 +163,7 @@ TEST_CASE(
   CHECK(std::get<2>(res.value()) == 25);
 }
 
-using my_string_sender_t = decltype(ex::transfer_just(inline_scheduler{}, std::string{}));
+using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
 
 optional<tuple<std::string>> tag_invoke(
     decltype(sync_wait), inline_scheduler sched, my_string_sender_t&& s) {
@@ -199,7 +199,7 @@ optional<tuple<std::string>> tag_invoke(decltype(sync_wait), my_other_string_sen
 
 TEST_CASE("sync_wait can be customized with scheduler", "[consumers][sync_wait]") {
   // The customization will return a different value
-  auto snd = ex::transfer_just(inline_scheduler{}, std::string{"hello"});
+  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{});
   optional<tuple<std::string>> res = sync_wait(std::move(snd));
   CHECK(res.has_value());
   CHECK(std::get<0>(res.value()) == "hallo");

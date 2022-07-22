@@ -150,7 +150,7 @@ TEST_CASE("let_value can be used with just_stopped", "[adaptors][let_value]") {
 TEST_CASE("let_value function is not called on error", "[adaptors][let_value]") {
   bool called{false};
   error_scheduler sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) //
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) //
                         | ex::let_value([&](int& x) {
                             called = true;
                             return ex::just(x + 5);
@@ -162,7 +162,7 @@ TEST_CASE("let_value function is not called on error", "[adaptors][let_value]") 
 TEST_CASE("let_value function is not called when cancelled", "[adaptors][let_value]") {
   bool called{false};
   stopped_scheduler sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) //
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) //
                         | ex::let_value([&](int& x) {
                             called = true;
                             return ex::just(x + 5);
@@ -205,7 +205,7 @@ TEST_CASE("let_value exposes a parameter that is destructed when the main operat
                         | ex::let_value([&](const my_type& obj) {
                             CHECK_FALSE(param_destructed);
                             fun_called = true;
-                            return ex::transfer_just(sched, 13);
+                            return ex::just(13) | ex::transfer(sched);
                           });
 
   {
@@ -235,7 +235,7 @@ TEST_CASE("let_value works when changing threads", "[adaptors][let_value]") {
   bool called{false};
   {
     // lunch some work on the thread pool
-    ex::sender auto snd = ex::transfer_just(pool.get_scheduler(), 7)                 //
+    ex::sender auto snd = ex::just(7) | ex::transfer(pool.get_scheduler())                 //
                           | ex::let_value([](int& x) { return ex::just(x * 2 - 1); }) //
                           | ex::then([&](int x) {
                               CHECK(x == 13);
@@ -267,11 +267,11 @@ TEST_CASE("let_value keeps error_types from input sender", "[adaptors][let_value
   error_scheduler<int> sched3{43};
 
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched1) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched1) | ex::let_value([] { return ex::just(); }));
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched2) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched2) | ex::let_value([] { return ex::just(); }));
   check_err_types<type_array<std::exception_ptr, int>>( //
-      ex::transfer_just(sched3) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched3) | ex::let_value([] { return ex::just(); }));
 }
 TEST_CASE("let_value keeps sends_stopped from input sender", "[adaptors][let_value]") {
   inline_scheduler sched1{};
@@ -279,15 +279,15 @@ TEST_CASE("let_value keeps sends_stopped from input sender", "[adaptors][let_val
   stopped_scheduler sched3{};
 
   check_sends_stopped<false>( //
-      ex::transfer_just(sched1) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched1) | ex::let_value([] { return ex::just(); }));
   check_sends_stopped<true>( //
-      ex::transfer_just(sched2) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched2) | ex::let_value([] { return ex::just(); }));
   check_sends_stopped<true>( //
-      ex::transfer_just(sched3) | ex::let_value([] { return ex::just(); }));
+      ex::just() | ex::transfer(sched3) | ex::let_value([] { return ex::just(); }));
 }
 
 // Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::transfer_just(inline_scheduler{}, std::string{}));
+using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
 template <typename Fun>
 auto tag_invoke(ex::let_value_t, inline_scheduler sched, my_string_sender_t, Fun) {
   return ex::just(std::string{"hallo"});
@@ -295,7 +295,7 @@ auto tag_invoke(ex::let_value_t, inline_scheduler sched, my_string_sender_t, Fun
 
 TEST_CASE("let_value can be customized", "[adaptors][let_value]") {
   // The customization will return a different value
-  auto snd = ex::transfer_just(inline_scheduler{}, std::string{"hello"}) //
+  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
              | ex::let_value([](std::string& x) { return ex::just(x + ", world"); });
   wait_for_value(std::move(snd), std::string{"hallo"});
 }

@@ -4345,30 +4345,6 @@ namespace std::execution {
   inline constexpr __complete_on::__complete_on_t complete_on {};
 
   /////////////////////////////////////////////////////////////////////////////
-  // [execution.senders.transfer_just]
-  namespace __transfer_just {
-    struct transfer_just_t {
-      template <scheduler _Scheduler, __movable_value... _Values>
-        requires tag_invocable<transfer_just_t, _Scheduler, _Values...> &&
-          sender<tag_invoke_result_t<transfer_just_t, _Scheduler, _Values...>>
-      auto operator()(_Scheduler&& __sched, _Values&&... __vals) const
-        noexcept(nothrow_tag_invocable<transfer_just_t, _Scheduler, _Values...>)
-        -> tag_invoke_result_t<transfer_just_t, _Scheduler, _Values...> {
-        return tag_invoke(*this, (_Scheduler&&) __sched, (_Values&&) __vals...);
-      }
-      template <scheduler _Scheduler, __movable_value... _Values>
-        requires (!tag_invocable<transfer_just_t, _Scheduler, _Values...> ||
-          !sender<tag_invoke_result_t<transfer_just_t, _Scheduler, _Values...>>)
-      auto operator()(_Scheduler&& __sched, _Values&&... __vals) const
-        -> decltype(transfer(just((_Values&&) __vals...), (_Scheduler&&) __sched)) {
-        return transfer(just((_Values&&) __vals...), (_Scheduler&&) __sched);
-      }
-    };
-  } // namespace __transfer_just
-  using __transfer_just::transfer_just_t;
-  inline constexpr transfer_just_t transfer_just{};
-
-  /////////////////////////////////////////////////////////////////////////////
   // [execution.senders.adaptors.into_variant]
   namespace __into_variant {
     struct into_variant_t;
@@ -4808,51 +4784,11 @@ namespace std::execution {
           return when_all_t{}(into_variant((_Senders&&) __sndrs)...);
       }
     };
-
-    struct transfer_when_all_t {
-      template <scheduler _Sched, sender... _Senders>
-        requires tag_invocable<transfer_when_all_t, _Sched, _Senders...> &&
-          sender<tag_invoke_result_t<transfer_when_all_t, _Sched, _Senders...>>
-      auto operator()(_Sched&& __sched, _Senders&&... __sndrs) const
-        noexcept(nothrow_tag_invocable<transfer_when_all_t, _Sched, _Senders...>)
-        -> tag_invoke_result_t<transfer_when_all_t, _Sched, _Senders...> {
-        return tag_invoke(*this, (_Sched&&) __sched, (_Senders&&) __sndrs...);
-      }
-
-      template <scheduler _Sched, sender... _Senders>
-        requires ((!tag_invocable<transfer_when_all_t, _Sched, _Senders...>) ||
-          (!sender<tag_invoke_result_t<transfer_when_all_t, _Sched, _Senders...>>))
-      auto operator()(_Sched&& __sched, _Senders&&... __sndrs) const {
-        return transfer(when_all_t{}((_Senders&&) __sndrs...), (_Sched&&) __sched);
-      }
-    };
-
-    struct transfer_when_all_with_variant_t {
-      template <scheduler _Sched, sender... _Senders>
-        requires tag_invocable<transfer_when_all_with_variant_t, _Sched, _Senders...> &&
-          sender<tag_invoke_result_t<transfer_when_all_with_variant_t, _Sched, _Senders...>>
-      auto operator()(_Sched&& __sched, _Senders&&... __sndrs) const
-        noexcept(nothrow_tag_invocable<transfer_when_all_with_variant_t, _Sched, _Senders...>)
-        -> tag_invoke_result_t<transfer_when_all_with_variant_t, _Sched, _Senders...> {
-        return tag_invoke(*this, (_Sched&&) __sched, (_Senders&&) __sndrs...);
-      }
-
-      template <scheduler _Sched, sender... _Senders>
-        requires (!tag_invocable<transfer_when_all_with_variant_t, _Sched, _Senders...>) &&
-          (__callable<into_variant_t, _Senders> &&...)
-      auto operator()(_Sched&& __sched, _Senders&&... __sndrs) const {
-        return transfer_when_all_t{}((_Sched&&) __sched, into_variant((_Senders&&) __sndrs)...);
-      }
-    };
   } // namespace __when_all
   using __when_all::when_all_t;
   inline constexpr when_all_t when_all{};
   using __when_all::when_all_with_variant_t;
   inline constexpr when_all_with_variant_t when_all_with_variant{};
-  using __when_all::transfer_when_all_t;
-  inline constexpr transfer_when_all_t transfer_when_all{};
-  using __when_all::transfer_when_all_with_variant_t;
-  inline constexpr transfer_when_all_with_variant_t transfer_when_all_with_variant{};
 } // namespace execution
 
 namespace std::this_thread {

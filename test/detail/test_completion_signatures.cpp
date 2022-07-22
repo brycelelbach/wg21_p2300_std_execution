@@ -77,7 +77,7 @@ TEST_CASE(
   using snd_eptr_t = decltype(ex::just_error(exception_ptr{}));
   using snd_ec_t = decltype(ex::just_error(error_code{}));
   using snd_str_t = decltype(ex::just_error(std::string{}));
-  using snd_tr_just_t = decltype(ex::transfer_just(error_scheduler{}));
+  using snd_tr_just_t = decltype(ex::transfer(ex::just(), error_scheduler{}));
 
   using err_types_eptr = ex::__error_types_of_t<snd_eptr_t>;
   using err_types_ec = ex::__error_types_of_t<snd_ec_t>;
@@ -250,7 +250,7 @@ using my_error_types = Variant<exception_ptr>;
 
 TEST_CASE("error_types_of_t can be used to get error types",
     "[detail][completion_signatures]") {
-  using snd_t = decltype(ex::transfer_just(inline_scheduler{}, 1));
+  using snd_t = decltype(ex::just(1) | ex::transfer(inline_scheduler{}));
   using err_t = ex::error_types_of_t<snd_t, ex::no_env, __types>;
   static_assert(is_same_v<err_t, __types<std::exception_ptr>>);
 }
@@ -260,7 +260,7 @@ TEST_CASE(
     "[detail][completion_signatures]") {
   using tr = __transform<__q1<set_error_sig>>;
 
-  using snd_t = decltype(ex::transfer_just(inline_scheduler{}, 1));
+  using snd_t = decltype(ex::just(1) | ex::transfer(inline_scheduler{}));
   using err_t =
       ex::error_types_of_t<snd_t, ex::no_env, tr::template __f>;
   static_assert(is_same_v<err_t, __types<ex::set_error_t(std::exception_ptr)>>);

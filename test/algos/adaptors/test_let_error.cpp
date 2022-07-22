@@ -130,7 +130,7 @@ TEST_CASE("let_error function is not called on regular flow", "[adaptors][let_er
 TEST_CASE("let_error function is not called when cancelled", "[adaptors][let_error]") {
   bool called{false};
   stopped_scheduler sched;
-  ex::sender auto snd = ex::transfer_just(sched, 13) //
+  ex::sender auto snd = ex::just(13) | ex::transfer(sched) //
                         | ex::let_error([&](std::exception_ptr) {
                             called = true;
                             return ex::just(0);
@@ -188,7 +188,7 @@ TEST_CASE("let_error exposes a parameter that is destructed when the main operat
                         | ex::let_error([&](const my_type& obj) {
                             CHECK_FALSE(param_destructed);
                             fun_called = true;
-                            return ex::transfer_just(sched, 13);
+                            return ex::just(13) | ex::transfer(sched);
                           });
   int res{0};
   {
@@ -277,26 +277,26 @@ TEST_CASE("let_error overrides error_types from input sender (and adds std::exce
 
   // Returning ex::just_error
   check_err_types<type_array<std::exception_ptr, std::string>>( //
-      ex::transfer_just(sched1)                                 //
+      ex::just() | ex::transfer(sched1)                                 //
       | ex::let_error([](std::exception_ptr) { return ex::just_error(std::string{"err"}); }));
   check_err_types<type_array<std::exception_ptr, std::string>>( //
-      ex::transfer_just(sched2)                                 //
+      ex::just() | ex::transfer(sched2)                                 //
       | ex::let_error([](std::exception_ptr) { return ex::just_error(std::string{"err"}); }));
   check_err_types<type_array<std::exception_ptr, std::string>>( //
-      ex::transfer_just(sched3)                                 //
+      ex::just() | ex::transfer(sched3)                                 //
       | ex::let_error([](std::__one_of<int, std::exception_ptr> auto) {
           return ex::just_error(std::string{"err"});
         }));
 
   // Returning ex::just
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched1)                    //
+      ex::just() | ex::transfer(sched1)                    //
       | ex::let_error([](std::exception_ptr) { return ex::just(); }));
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched2)                    //
+      ex::just() | ex::transfer(sched2)                    //
       | ex::let_error([](std::exception_ptr) { return ex::just(); }));
   check_err_types<type_array<std::exception_ptr>>( //
-      ex::transfer_just(sched3)                    //
+      ex::just() | ex::transfer(sched3)                    //
       | ex::let_error([](std::__one_of<int, std::exception_ptr> auto) { return ex::just(); }));
 }
 
@@ -306,15 +306,15 @@ TEST_CASE("let_error keeps sends_stopped from input sender", "[adaptors][let_err
   stopped_scheduler sched3{};
 
   check_sends_stopped<false>( //
-      ex::transfer_just(sched1) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
+      ex::just() | ex::transfer(sched1) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
   check_sends_stopped<true>( //
-      ex::transfer_just(sched2) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
+      ex::just() | ex::transfer(sched2) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
   check_sends_stopped<true>( //
-      ex::transfer_just(sched3) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
+      ex::just() | ex::transfer(sched3) | ex::let_error([](std::exception_ptr) { return ex::just(); }));
 }
 
 // Return a different sender when we invoke this custom defined on implementation
-using my_string_sender_t = decltype(ex::transfer_just(inline_scheduler{}, std::string{}));
+using my_string_sender_t = decltype(ex::just(std::string{}) | ex::transfer(inline_scheduler{}));
 template <typename Fun>
 auto tag_invoke(ex::let_error_t, inline_scheduler sched, my_string_sender_t, Fun) {
   return ex::just(std::string{"what error?"});
@@ -322,7 +322,7 @@ auto tag_invoke(ex::let_error_t, inline_scheduler sched, my_string_sender_t, Fun
 
 TEST_CASE("let_error can be customized", "[adaptors][let_error]") {
   // The customization will return a different value
-  auto snd = ex::transfer_just(inline_scheduler{}, std::string{"hello"}) //
+  auto snd = ex::just(std::string{"hello"}) | ex::transfer(inline_scheduler{}) //
              | ex::let_error([](std::exception_ptr) { return ex::just(std::string{"err"}); });
   wait_for_value(std::move(snd), std::string{"what error?"});
 }
