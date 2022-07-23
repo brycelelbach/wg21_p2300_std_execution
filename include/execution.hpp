@@ -2497,13 +2497,15 @@ namespace std::execution {
 
         using __receiver_ = __receiver<__sh_state>;
 
+        _Sender __sndr_;
         in_place_stop_source __stop_source_{};
         connect_result_t<_Sender, __receiver_> __op_state2_;
         __variant_t __data_;
         atomic<void*> __head_;
 
-        explicit __sh_state(_Sender& __sndr)
-          : __op_state2_(connect((_Sender&&) __sndr, __receiver_{*this}))
+        explicit __sh_state(_Sender&& __sndr)
+          : __sndr_((_Sender&&)__sndr)
+          ,  __op_state2_(connect((_Sender&&) __sndr_, __receiver_{*this}))
           , __head_{nullptr}
         {}
 
@@ -2595,7 +2597,6 @@ namespace std::execution {
         template <class _Receiver>
           using __operation = __operation<_SenderId, __x<remove_cvref_t<_Receiver>>>;
 
-        _Sender __sndr_;
         shared_ptr<__sh_state_> __shared_state_;
 
       public:
@@ -2633,8 +2634,7 @@ namespace std::execution {
               __set_error_t>;
 
         explicit __sender(_Sender __sndr)
-            : __sndr_((_Sender&&) __sndr)
-            , __shared_state_{make_shared<__sh_state_>(__sndr_)}
+            : __shared_state_{make_shared<__sh_state_>((_Sender&&)__sndr)}
         {}
       };
 

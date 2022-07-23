@@ -181,6 +181,47 @@ TEST_CASE("split can be an rvalue", "[adaptors][split]") {
 
   REQUIRE( val == 42 );
 }
+struct move_only_type {
+  move_only_type(int v) : val(v) {}
+  move_only_type(move_only_type&&) = default;
+  int val;
+};
+struct copy_and_movable_type {
+  copy_and_movable_type(int v) : val(v) {}
+  int val;
+};
+TEMPLATE_TEST_CASE("split move only sender", "[adaptors][split]", move_only_type, copy_and_movable_type) {
+  int called = 0;
+  auto multishot = 
+      ex::just(TestType(10)) |
+      ex::then([&](TestType obj) { ++called; return TestType(obj.val+1); }) |
+      ex::split();
+  auto wa =
+    ex::when_all(
+        ex::then(multishot, [](const TestType& obj) { return obj.val; }),
+        ex::then(multishot, [](const TestType& obj) { return obj.val * 2; }),
+        ex::then(multishot, [](const TestType& obj) { return obj.val * 3; })
+      );
+
+  auto [v1, v2, v3] = std::this_thread::sync_wait(std::move(wa)).value();
+
+  REQUIRE( called == 1 );
+  REQUIRE( v1 == 11 );
+  REQUIRE( v2 == 22 );
+  REQUIRE( v3 == 33 );
+}
+TEST_CASE("split into when_all", "[adaptors][split]") {
+  int counter{};
+  auto snd = ex::split(ex::just() | ex::then([&]{ counter++; return counter; }));
+  auto wa = ex::when_all(
+    snd | ex::then([](auto) { return 10; }),
+    snd | ex::then([](auto) { return 20; }));
+  REQUIRE( counter == 0 );
+  auto [v1, v2] = std::this_thread::sync_wait(std::move(wa)).value();
+  REQUIRE( counter == 1 );
+  REQUIRE( v1 == 10 );
+  REQUIRE( v2 == 20 );
+}
 TEST_CASE("split can nest", "[adaptors][split]") {
   auto split_1 = ex::just(42) | ex::split();
   auto split_2 = split_1 | ex::split();
