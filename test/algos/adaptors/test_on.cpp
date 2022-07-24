@@ -172,4 +172,172 @@ TEST_CASE("on keeps sends_stopped from scheduler's sender", "[adaptors][on]") {
   check_sends_stopped<true>(ex::on(sched3, ex::just(3)));
 }
 
+TEST_CASE("on transitions back to the receiver's scheduler", "[adaptors][on]") {
+  bool called{false};
+  auto snd_base = ex::just() | ex::then([&]() -> int {
+    called = true;
+    return 19;
+  });
+
+  int recv_value{0};
+  impulse_scheduler sched1;
+  impulse_scheduler sched2;
+  auto snd = ex::on(sched1, std::move(snd_base)) | ex::complete_on(sched2);
+  auto op = ex::connect(std::move(snd), expect_value_receiver_ex{&recv_value});
+  ex::start(op);
+  // Up until this point, the scheduler didn't start any task
+  // The base sender shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched1 to start executing one task
+  sched1.start_next();
+
+  // Now the base sender is called, and execution is transfered to sched2
+  CHECK(called);
+  CHECK(recv_value == 0);
+
+  // Tell sched2 to start executing one task
+  sched2.start_next();
+
+  // Now the base sender is called, and a value is sent to the receiver
+  CHECK(recv_value == 19);
+}
+
+TEST_CASE("inner on transitions back to outer on's scheduler", "[adaptors][on]") {
+  bool called{false};
+  auto snd_base = ex::just() | ex::then([&]() -> int {
+    called = true;
+    return 19;
+  });
+
+  int recv_value{0};
+  impulse_scheduler sched1;
+  impulse_scheduler sched2;
+  impulse_scheduler sched3;
+  auto snd =
+      ex::on(sched1, ex::on(sched2, std::move(snd_base)))
+    | ex::complete_on(sched3);
+  auto op = ex::connect(std::move(snd), expect_value_receiver_ex{&recv_value});
+  ex::start(op);
+  // Up until this point, the scheduler didn't start any task
+  // The base sender shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched1 to start executing one task. This will post
+  // work to sched2
+  sched1.start_next();
+
+  // The base sender shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched2 to start executing one task. This will execute
+  // the base sender and post work back to sched1
+  sched2.start_next();
+
+  // Now the base sender is called, and execution is transfered back
+  // to sched1
+  CHECK(called);
+  CHECK(recv_value == 0);
+
+  // Tell sched1 to start executing one task. This will post work to
+  // sched3
+  sched1.start_next();
+
+  // The final receiver still hasn't been called
+  CHECK(recv_value == 0);
+
+  // Tell sched3 to start executing one task. It should call the
+  // final receiver
+  sched3.start_next();
+
+  // Now the value is sent to the receiver
+  CHECK(recv_value == 19);
+}
+
+TEST_CASE("on(closure) transitions onto and back off of the scheduler", "[adaptors][on]") {
+  bool called{false};
+  auto closure = ex::then([&]() -> int {
+    called = true;
+    return 19;
+  });
+
+  int recv_value{0};
+  impulse_scheduler sched1;
+  impulse_scheduler sched2;
+  auto snd =
+      ex::just()
+    | ex::on(sched1, std::move(closure))
+    | ex::complete_on(sched2);
+  auto op = ex::connect(std::move(snd), expect_value_receiver_ex{&recv_value});
+  ex::start(op);
+  // Up until this point, the scheduler didn't start any task
+  // The closure shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched1 to start executing one task
+  sched1.start_next();
+
+  // Now the closure is called, and execution is transfered to sched2
+  CHECK(called);
+  CHECK(recv_value == 0);
+
+  // Tell sched2 to start executing one task
+  sched2.start_next();
+
+  // Now the closure is called, and a value is sent to the receiver
+  CHECK(recv_value == 19);
+}
+
+TEST_CASE("inner on(closure) transitions back to outer on's scheduler", "[adaptors][on]") {
+  bool called{false};
+  auto closure = ex::then([&](int i) -> int {
+    called = true;
+    return i;
+  });
+
+  int recv_value{0};
+  impulse_scheduler sched1;
+  impulse_scheduler sched2;
+  impulse_scheduler sched3;
+  auto snd =
+      ex::on(sched1, ex::just(19))
+    | ex::on(sched2, std::move(closure))
+    | ex::complete_on(sched3);
+  auto op = ex::connect(std::move(snd), expect_value_receiver_ex{&recv_value});
+  ex::start(op);
+  // Up until this point, the scheduler didn't start any task
+  // The closure shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched1 to start executing one task. This will post
+  // work to sched3
+  sched1.start_next();
+
+  // The closure shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched3 to start executing one task. This post work to
+  // sched2.
+  sched3.start_next();
+
+  // The closure shouldn't be started
+  CHECK_FALSE(called);
+
+  // Tell sched2 to start executing one task. This will execute
+  // the closure and post work back to sched3
+  sched2.start_next();
+
+  // Now the closure is called, and execution is transfered back
+  // to sched3
+  CHECK(called);
+  CHECK(recv_value == 0);
+
+  // Tell sched3 to start executing one task. This will call the
+  // receiver
+  sched3.start_next();
+
+  // Now the value is sent to the receiver
+  CHECK(recv_value == 19);
+}
+
 #endif
