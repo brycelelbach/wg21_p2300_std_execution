@@ -32,6 +32,7 @@ namespace ex = std::execution;
 using std::optional;
 using std::tuple;
 using std::this_thread::sync_wait;
+using std::this_thread::sync_wait_with_variant;
 
 using namespace std::chrono_literals;
 
@@ -114,6 +115,32 @@ TEST_CASE("sync_wait doesn't accept multi-variant senders", "[consumers][sync_wa
       | ex::let_error([](std::exception_ptr) { return ex::just(std::string{"err"}); });
   check_val_types<type_array<type_array<int>, type_array<std::string>>>(snd);
   static_assert(!std::invocable<decltype(sync_wait), decltype(snd)>);
+}
+
+TEST_CASE("sync_wait_with_variant accepts multi-variant senders", "[consumers][sync_wait_with_variant]") {
+  ex::sender auto snd =
+      fallible_just{13}
+      | ex::let_error([](std::exception_ptr) { return ex::just(std::string{"err"}); });
+  check_val_types<type_array<type_array<int>, type_array<std::string>>>(snd);
+  static_assert(std::invocable<decltype(sync_wait_with_variant), decltype(snd)>);
+
+  std::optional<std::tuple<std::variant<std::tuple<int>, std::tuple<std::string>>>> res =
+    sync_wait_with_variant(snd);
+
+  CHECK(res.has_value());
+  CHECK(std::get<0>(std::get<0>(res.value())) == std::make_tuple(13));
+}
+
+TEST_CASE("sync_wait_with_variant accepts single-value senders", "[consumers][sync_wait_with_variant]") {
+  ex::sender auto snd = ex::just(13);
+  check_val_types<type_array<type_array<int>>>(snd);
+  static_assert(std::invocable<decltype(sync_wait_with_variant), decltype(snd)>);
+
+  std::optional<std::tuple<std::variant<std::tuple<int>>>> res =
+    sync_wait_with_variant(snd);
+
+  CHECK(res.has_value());
+  CHECK(std::get<0>(std::get<0>(res.value())) == std::make_tuple(13));
 }
 
 TEST_CASE("sync_wait works if signaled from a different thread", "[consumers][sync_wait]") {
@@ -210,6 +237,55 @@ TEST_CASE("sync_wait can be customized without scheduler", "[consumers][sync_wai
   optional<tuple<std::string>> res = sync_wait(std::move(snd));
   CHECK(res.has_value());
   CHECK(std::get<0>(res.value()) == "ciao");
+}
+
+using multi_value_impl_t = decltype(fallible_just{std::string{}} | ex::let_error([](std::exception_ptr) { return ex::just(0); }));
+struct my_multi_value_sender_t {
+  std::string str_;
+  using completion_signatures = ex::completion_signatures_of_t<multi_value_impl_t>;
+
+  template <class Recv>
+  friend auto tag_invoke(ex::connect_t, my_multi_value_sender_t&& self, Recv&& recv) {
+    return ex::connect(ex::just(std::move(self.str_)), std::forward<Recv>(recv));
+  }
+  template <class Recv>
+  friend auto tag_invoke(ex::connect_t, const my_multi_value_sender_t& self, Recv&& recv) {
+    return ex::connect(ex::just(self.str_), std::forward<Recv>(recv));
+  }
+};
+
+using my_transfered_multi_value_sender_t = decltype(ex::transfer(my_multi_value_sender_t{}, inline_scheduler{}));
+optional<std::tuple<std::variant<std::tuple<std::string>, std::tuple<int>>>> tag_invoke(
+    decltype(sync_wait_with_variant), inline_scheduler sched, my_transfered_multi_value_sender_t&& s) {
+  std::string res;
+  auto op = ex::connect(std::move(s), expect_value_receiver_ex{&res});
+  ex::start(op);
+  CHECK(res == "hello_multi");
+  // change the string
+  res = "hallo_multi";
+  return {res};
+}
+
+optional<std::tuple<std::variant<std::tuple<std::string>, std::tuple<int>>>> tag_invoke(decltype(sync_wait_with_variant), my_multi_value_sender_t s) {
+  CHECK(s.str_ == "hello_multi");
+  return {std::string{"ciao_multi"}};
+}
+
+TEST_CASE("sync_wait_with_variant can be customized with scheduler", "[consumers][sync_wait_with_variant]") {
+  // The customization will return a different value
+  auto snd = ex::transfer(my_multi_value_sender_t{"hello_multi"}, inline_scheduler{});
+  auto snd2 = ex::transfer_just(inline_scheduler{}, std::string{"hello"});
+  optional<std::tuple<std::variant<std::tuple<std::string>, std::tuple<int>>>> res = sync_wait_with_variant(std::move(snd));
+  CHECK(res.has_value());
+  CHECK(std::get<0>(std::get<0>(res.value())) == std::make_tuple(std::string{"hallo_multi"}));
+}
+
+TEST_CASE("sync_wait_with_variant can be customized without scheduler", "[consumers][sync_wait_with_variant]") {
+  // The customization will return a different value
+  my_multi_value_sender_t snd{std::string{"hello_multi"}};
+  optional<std::tuple<std::variant<std::tuple<std::string>, std::tuple<int>>>> res = sync_wait_with_variant(std::move(snd));
+  CHECK(res.has_value());
+  CHECK(std::get<0>(std::get<0>(res.value())) == std::make_tuple(std::string{"ciao_multi"}));
 }
 
 #endif
