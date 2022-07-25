@@ -3869,9 +3869,13 @@ namespace std::execution {
   /////////////////////////////////////////////////////////////////////////////
   // [execution.senders.adaptors.on]
   namespace __on {
-    struct on_t;
+    enum class on_kind { start_on, continue_on };
+
+    template <on_kind>
+      struct on_t;
+
     template <class _SchedulerId, class _SenderId>
-      struct __start_on_fn {
+      struct __start_fn {
         using _Scheduler = __t<_SchedulerId>;
         using _Sender = __t<_SenderId>;
         _Scheduler __sched_;
@@ -3892,11 +3896,66 @@ namespace std::execution {
         }
       };
     template <class _Scheduler, class _Sender>
-      __start_on_fn(_Scheduler, _Sender)
-        -> __start_on_fn<__x<_Scheduler>, __x<_Sender>>;
+      __start_fn(_Scheduler, _Sender)
+        -> __start_fn<__x<_Scheduler>, __x<_Sender>>;
+
+    template <class _SchedulerId, class _SenderId>
+      struct __start_on_sender {
+        using _Scheduler = __t<_SchedulerId>;
+        using _Sender = __t<_SenderId>;
+        using descriptor_t = sender_descriptor_t<on_t<on_kind::start_on>(_Sender)>;
+
+        _Scheduler __sched_;
+        _Sender __sndr_;
+
+        template <class _Self>
+          static auto __call(_Self&& __self) {
+            return let_value(
+              transfer(
+                read_with_default(get_scheduler, __self.__sched_),
+                __self.__sched_),
+              __start_fn{__self.__sched_, ((_Self&&) __self).__sndr_});
+          }
+
+        template <class _Self>
+          using __inner_t = decltype(__call(__declval<_Self>()));
+
+        template <__decays_to<__start_on_sender> _Self, receiver _Receiver>
+            requires constructible_from<_Sender, __member_t<_Self, _Sender>> &&
+              sender_to<__inner_t<_Self>, _Receiver>
+          friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __receiver)
+            -> connect_result_t<__inner_t<_Self>, _Receiver> {
+            return connect(__call((_Self&&) __self), (_Receiver&&) __receiver);
+          }
+
+        template <__decays_to<__start_on_sender> _Self, class _Env>
+          friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env&&)
+            -> completion_signatures_of_t<__inner_t<_Self>, _Env>;
+
+        // forward sender queries:
+        template <__sender_queries::__sender_query _Tag, class... _As>
+            requires __callable<_Tag, const _Sender&, _As...>
+          friend auto tag_invoke(_Tag __tag, const __start_on_sender& __self, _As&&... __as)
+            noexcept(__nothrow_callable<_Tag, const _Sender&, _As...>)
+            -> __call_result_if_t<__sender_queries::__sender_query<_Tag>, _Tag, const _Sender&, _As...> {
+            return ((_Tag&&) __tag)(__self.__sndr_, (_As&&) __as...);
+          }
+      };
+    template <class _Scheduler, class _Sender>
+      __start_on_sender(_Scheduler, _Sender)
+        -> __start_on_sender<__x<_Scheduler>, __x<_Sender>>;
+
+    template <>
+      struct on_t<on_kind::start_on> {
+        template <scheduler _Scheduler, sender _Sender>
+            requires constructible_from<decay_t<_Sender>, _Sender>
+          auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const {
+            return __start_on_sender{(_Scheduler&&) __sched, (_Sender&&) __sndr};
+          }
+      };
 
     template <class _SenderId, class _SchedulerId, class _ClosureId>
-      struct __complete_on_fn {
+      struct __continue_fn {
         using _Sender = __t<_SenderId>;
         using _Scheduler = __t<_SchedulerId>;
         using _Closure = __t<_ClosureId>;
@@ -3922,35 +3981,88 @@ namespace std::execution {
         }
       };
     template <class _Sender, class _Scheduler, class _Closure>
-      __complete_on_fn(_Sender, _Scheduler, _Closure)
-        -> __complete_on_fn<__x<_Sender>, __x<_Scheduler>, __x<_Closure>>;
+      __continue_fn(_Sender, _Scheduler, _Closure)
+        -> __continue_fn<__x<_Sender>, __x<_Scheduler>, __x<_Closure>>;
 
-    struct on_t {
-      // TODO wrap this in its own sender with a custom tag type
-      template <scheduler _Scheduler, sender _Sender>
-      auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const {
-        return let_value(
-          transfer(read_with_default(get_scheduler, __sched), __sched),
-          __start_on_fn{(_Scheduler&&) __sched, (_Sender&&) __sndr});
-      }
+    template <class _SenderId, class _SchedulerId, class _ClosureId>
+      struct __continue_on_sender {
+        using _Sender = __t<_SenderId>;
+        using _Scheduler = __t<_SchedulerId>;
+        using _Closure = __t<_ClosureId>;
+        using descriptor_t = sender_descriptor_t<on_t<on_kind::continue_on>(_Sender)>;
 
-      // TODO wrap this in its own sender with a custom tag type
-      template <sender _Sender, scheduler _Scheduler, __sender_adaptor_closure_for<_Sender> _Closure>
-      auto operator()(_Sender&& __sndr, _Scheduler&& __sched, _Closure __closure) const {
-        return let_value(
-          read_with_default(get_scheduler, __sched),
-          __complete_on_fn{(_Sender&&) __sndr, __sched, (_Closure&&) __closure});
-      }
+        _Sender __sndr_;
+        _Scheduler __sched_;
+        _Closure __closure_;
 
-      template <scheduler _Scheduler, __sender_adaptor_closure _Closure>
-      auto operator()(_Scheduler&& __sched, _Closure __closure) const
-        -> __binder_back<on_t, decay_t<_Scheduler>, _Closure> {
-        return {{}, {}, {(_Scheduler&&) __sched, (_Closure&&) __closure}};
-      }
+        template <class _Self>
+          static auto __call(_Self&& __self) {
+            return let_value(
+              read_with_default(get_scheduler, __self.__sched_),
+              __continue_fn{
+                ((_Self&&) __self).__sndr_,
+                __self.__sched_,
+                ((_Self&&) __self).__closure_});
+          }
+
+        template <class _Self>
+          using __inner_t = decltype(__call(__declval<_Self>()));
+
+        template <__decays_to<__continue_on_sender> _Self, receiver _Receiver>
+            requires constructible_from<_Sender, __member_t<_Self, _Sender>> &&
+              sender_to<__inner_t<_Self>, _Receiver>
+          friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __receiver)
+            -> connect_result_t<__inner_t<_Self>, _Receiver> {
+            return connect(__call((_Self&&) __self), (_Receiver&&) __receiver);
+          }
+
+        template <__decays_to<__continue_on_sender> _Self, class _Env>
+          friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env&&)
+            -> completion_signatures_of_t<__inner_t<_Self>, _Env>;
+
+        // forward sender queries:
+        template <__sender_queries::__sender_query _Tag, class... _As>
+            requires __callable<_Tag, const _Sender&, _As...>
+          friend auto tag_invoke(_Tag __tag, const __continue_on_sender& __self, _As&&... __as)
+            noexcept(__nothrow_callable<_Tag, const _Sender&, _As...>)
+            -> __call_result_if_t<__sender_queries::__sender_query<_Tag>, _Tag, const _Sender&, _As...> {
+            return ((_Tag&&) __tag)(__self.__sndr_, (_As&&) __as...);
+          }
+      };
+    template <class _Sender, class _Scheduler, class _Closure>
+      __continue_on_sender(_Sender, _Scheduler, _Closure)
+        -> __continue_on_sender<__x<_Sender>, __x<_Scheduler>, __x<_Closure>>;
+
+    template <>
+      struct on_t<on_kind::continue_on> {
+        // TODO wrap this in its own sender with a custom tag type
+        template <sender _Sender, scheduler _Scheduler, __sender_adaptor_closure_for<_Sender> _Closure>
+            requires constructible_from<decay_t<_Sender>, _Sender>
+          auto operator()(_Sender&& __sndr, _Scheduler&& __sched, _Closure __closure) const {
+            return __continue_on_sender{
+              (_Sender&&) __sndr,
+              (_Scheduler&&) __sched,
+              (_Closure&&) __closure};
+          }
+
+        template <scheduler _Scheduler, __sender_adaptor_closure _Closure>
+          auto operator()(_Scheduler&& __sched, _Closure __closure) const
+            -> __binder_back<on_t, decay_t<_Scheduler>, _Closure> {
+            return {{}, {}, {(_Scheduler&&) __sched, (_Closure&&) __closure}};
+          }
+      };
+
+    struct __on_t
+      : on_t<on_kind::start_on>
+      , on_t<on_kind::continue_on> {
+      using on_t<on_kind::start_on>::operator();
+      using on_t<on_kind::continue_on>::operator();
     };
   } // namespace __on
+
+  using __on::on_kind;
   using __on::on_t;
-  inline constexpr on_t on{};
+  inline constexpr __on::__on_t on{};
 
   // namespace __complete_on
   namespace __complete_on {
