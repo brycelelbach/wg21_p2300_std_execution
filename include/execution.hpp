@@ -170,7 +170,7 @@ namespace std::execution {
   using __env::with;
   inline constexpr __env::__make_env_t make_env {};
   inline constexpr __env::get_env_t get_env{};
-  template <__class _Tag, class _Value>
+  template <__class _Tag, class _Value = __none_such>
     using with_t = __env::__with<_Tag, decay_t<_Value>>;
 
   template <class _EnvProvider>
@@ -3874,6 +3874,19 @@ namespace std::execution {
     template <on_kind>
       struct on_t;
 
+    template <class _Scheduler>
+      auto __with_domain(_Scheduler&&)
+          -> with_t<get_domain_t> {
+        return with(get_domain);
+      }
+
+    template <class _Scheduler>
+        requires __callable<get_domain_t, _Scheduler>
+      auto __with_domain(_Scheduler&& __sched)
+          -> with_t<get_domain_t, __domain_of_t<_Scheduler>> {
+        return with(get_domain, get_domain(__sched));
+      }
+
     template <class _SchedulerId, class _SenderId>
       struct __start_fn {
         using _Scheduler = __t<_SchedulerId>;
@@ -3884,7 +3897,7 @@ namespace std::execution {
         template <class _Self, class _OldScheduler>
           static auto __call(_Self&& __self, _OldScheduler __old_sched) {
             return std::move(((_Self&&) __self).__sndr_)
-              | write(with(get_scheduler, ((_Self&&) __self).__sched_))
+              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_))
               | transfer(__old_sched);
           }
 
@@ -3966,10 +3979,10 @@ namespace std::execution {
         template <class _Self, class _OldScheduler>
           static auto __call(_Self&& __self, _OldScheduler __old_sched) {
             return ((_Self&&) __self).__sndr_
-              | write(with(get_scheduler, __old_sched))
+              | write(with(get_scheduler, __old_sched), (__with_domain)(__old_sched))
               | transfer(__self.__sched_)
               | ((_Self&&) __self).__closure_
-              | write(with(get_scheduler, __self.__sched_))
+              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_))
               | transfer(__old_sched);
           }
 
