@@ -176,17 +176,17 @@ TEST_CASE("schedule_from keeps sends_stopped from scheduler's sender", "[adaptor
   check_sends_stopped<true>(ex::schedule_from(sched3, ex::just(3)));
 }
 
-using just_string_sender_t = decltype(ex::just(std::string{}));
-// Customization of schedule_from
-// Return a different sender
-auto tag_invoke(decltype(ex::schedule_from), inline_scheduler sched, just_string_sender_t) {
-  return ex::just(std::string{"hijacked"});
-}
-TEST_CASE("schedule_from can be customized", "[adaptors][schedule_from]") {
-  // The customization will return a different value
-  auto snd = ex::schedule_from(inline_scheduler{}, ex::just(std::string{"transfer"}));
-  auto op = ex::connect(std::move(snd), expect_value_receiver<std::string>("hijacked"));
-  ex::start(op);
-}
+// using just_string_sender_t = decltype(ex::just(std::string{}));
+// // Customization of schedule_from
+// // Return a different sender
+// auto tag_invoke(decltype(ex::schedule_from), inline_scheduler sched, just_string_sender_t) {
+//   return ex::just(std::string{"hijacked"});
+// }
+// TEST_CASE("schedule_from can be customized", "[adaptors][schedule_from]") {
+//   // The customization will return a different value
+//   auto snd = ex::schedule_from(inline_scheduler{}, ex::just(std::string{"transfer"}));
+//   auto op = ex::connect(std::move(snd), expect_value_receiver<std::string>("hijacked"));
+//   ex::start(op);
+// }
 
 #endif

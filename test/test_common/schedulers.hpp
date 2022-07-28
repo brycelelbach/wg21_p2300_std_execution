@@ -30,7 +30,8 @@ namespace ex = std::execution;
 //! not executed. This is similar to a task scheduler, but it's single threaded. It has basic
 //! thread-safety to allow it to be run with `sync_wait` (which makes us not control when the
 //! operation_state object is created and started).
-struct impulse_scheduler {
+template <class Domain = void>
+struct basic_impulse_scheduler {
   private:
   //! Command type that can store the action of firing up a sender
   using oper_command_t = std::function<void()>;
@@ -83,16 +84,16 @@ struct impulse_scheduler {
       return {self.shared_data_, (R &&) r};
     }
 
-    friend impulse_scheduler tag_invoke(
+    friend basic_impulse_scheduler tag_invoke(
         ex::get_completion_scheduler_t<ex::set_value_t>, my_sender) {
       return {};
     }
   };
 
   public:
-  impulse_scheduler()
+  basic_impulse_scheduler()
       : shared_data_(std::make_shared<data>()) {}
-  ~impulse_scheduler() = default;
+  ~basic_impulse_scheduler() = default;
 
   //! Actually start the command from the last started operation_state
   //! Blocks if no command registered (i.e., no operation state started)
@@ -112,16 +113,22 @@ struct impulse_scheduler {
     cmd();
   }
 
-  friend my_sender tag_invoke(ex::schedule_t, const impulse_scheduler& self) {
+  friend my_sender tag_invoke(ex::schedule_t, const basic_impulse_scheduler& self) {
     return my_sender{self.shared_data_.get()};
   }
 
-  friend bool operator==(impulse_scheduler, impulse_scheduler) noexcept { return true; }
-  friend bool operator!=(impulse_scheduler, impulse_scheduler) noexcept { return false; }
+  friend Domain tag_invoke(ex::get_domain_t, const basic_impulse_scheduler&) noexcept {
+    return Domain();
+  }
+
+  friend bool operator==(basic_impulse_scheduler, basic_impulse_scheduler) noexcept { return true; }
+  friend bool operator!=(basic_impulse_scheduler, basic_impulse_scheduler) noexcept { return false; }
 };
+using impulse_scheduler = basic_impulse_scheduler<>;
 
 //! Scheduler that executes everything inline, i.e., on the same thread
-struct inline_scheduler {
+template <class Domain = void>
+struct basic_inline_scheduler {
   template <typename R>
   struct oper : non_movable {
     R recv_;
@@ -145,19 +152,21 @@ struct inline_scheduler {
     }
 
     template <std::__one_of<ex::set_value_t, ex::set_error_t, ex::set_stopped_t> CPO>
-    friend inline_scheduler tag_invoke(ex::get_completion_scheduler_t<CPO>, my_sender) noexcept {
+    friend basic_inline_scheduler tag_invoke(ex::get_completion_scheduler_t<CPO>, my_sender) noexcept {
       return {};
     }
   };
 
-  friend my_sender tag_invoke(ex::schedule_t, inline_scheduler) { return {}; }
+  friend my_sender tag_invoke(ex::schedule_t, basic_inline_scheduler) { return {}; }
+  friend Domain tag_invoke(ex::get_domain_t, basic_inline_scheduler) noexcept { return Domain(); }
 
-  friend bool operator==(inline_scheduler, inline_scheduler) noexcept { return true; }
-  friend bool operator!=(inline_scheduler, inline_scheduler) noexcept { return false; }
+  friend bool operator==(basic_inline_scheduler, basic_inline_scheduler) noexcept { return true; }
+  friend bool operator!=(basic_inline_scheduler, basic_inline_scheduler) noexcept { return false; }
 };
+using inline_scheduler = basic_inline_scheduler<>;
 
 //! Scheduler that returns a sender that always completes with error.
-template <typename E = std::exception_ptr>
+template <typename E = std::exception_ptr, typename Domain = void>
 struct error_scheduler {
   template <typename R>
   struct oper : non_movable {
@@ -191,6 +200,7 @@ struct error_scheduler {
   E err_;
 
   friend my_sender tag_invoke(ex::schedule_t, error_scheduler self) { return {(E &&) self.err_}; }
+  friend Domain tag_invoke(ex::get_domain_t, const error_scheduler& self) noexcept { return Domain(); }
 
   friend bool operator==(error_scheduler, error_scheduler) noexcept { return true; }
   friend bool operator!=(error_scheduler, error_scheduler) noexcept { return false; }

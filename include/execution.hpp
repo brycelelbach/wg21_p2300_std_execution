@@ -427,8 +427,14 @@ namespace std::execution {
   template <class _Desc>
     concept __valid_sender_descriptor =
       requires (_Desc __desc) {
-        __test_valid_sender_descriptor(__desc);
+        (__test_valid_sender_descriptor)(__desc);
       };
+
+  template <class _Tag, class... _Args>
+    _Tag __get_sender_tag(_Tag(*)(_Args...));
+
+  template <class _Sender>
+    using tag_of_t = decltype((__get_sender_tag)(get_descriptor(__declval<_Sender>())));
 
   /////////////////////////////////////////////////////////////////////////////
   // [execution.senders]
@@ -477,7 +483,7 @@ namespace std::execution {
       __t<__checked_completion_signatures<_Sender, _Env>>;
 
   template <class _Receiver, class _Sender>
-    concept __receiver_from =
+    concept receiver_from =
       receiver_of<
         _Receiver,
         completion_signatures_of_t<_Sender, env_of_t<_Receiver>>>;
@@ -811,7 +817,7 @@ namespace std::execution {
 
     struct get_domain_t {
       template <__none_of<no_env> _Env>
-        requires nothrow_tag_invocable<get_domain_t, const _Env&>
+        requires tag_invocable<get_domain_t, const _Env&>
       auto operator()(const _Env& __env) const noexcept
         -> tag_invoke_result_t<get_domain_t, const _Env&> {
         static_assert(
@@ -1090,30 +1096,39 @@ namespace std::execution {
     struct connect_t;
 
     template <class _Sender, class _Receiver>
+      using __domain_t =
+        __minvoke<
+          __q1<__domain_of_t>,
+          __if_c<__valid1<__domain_of_t, _Sender>, _Sender, env_of_t<_Receiver>>>;
+
+    template <class _Sender, class _Receiver>
       concept __connectable_with_domain =
         sender<_Sender, env_of_t<_Receiver>> &&
-        __receiver_from<_Receiver, _Sender> &&
-        __callable<get_domain_t, env_of_t<_Receiver>> &&
-        tag_invocable<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>;
+        receiver_from<_Receiver, _Sender> &&
+        __valid2<__domain_t, _Sender, _Receiver> &&
+        tag_invocable<tag_of_t<_Sender>, __domain_t<_Sender, _Receiver>, _Sender, _Receiver>;
 
     template <class _Sender, class _Receiver>
       concept __connectable_with_tag_invoke =
         sender<_Sender, env_of_t<_Receiver>> &&
-        __receiver_from<_Receiver, _Sender> &&
+        receiver_from<_Receiver, _Sender> &&
         tag_invocable<connect_t, _Sender, _Receiver>;
 
     struct connect_t {
       template <class _Sender, class _Receiver>
         requires __connectable_with_domain<_Sender, _Receiver>
       auto operator()(_Sender&& __sndr, _Receiver&& __rcvr) const
-        noexcept(nothrow_tag_invocable<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>)
-        -> tag_invoke_result_t<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver> {
+        noexcept(nothrow_tag_invocable<tag_of_t<_Sender>, __domain_t<_Sender, _Receiver>, _Sender, _Receiver>)
+        -> tag_invoke_result_t<tag_of_t<_Sender>, __domain_t<_Sender, _Receiver>, _Sender, _Receiver> {
+        using _Tag = tag_of_t<_Sender>;
+        using _Domain = __domain_t<_Sender, _Receiver>;
         static_assert(
-          operation_state<tag_invoke_result_t<connect_t, __domain_of_t<env_of_t<_Receiver>>, _Sender, _Receiver>>,
+          operation_state<tag_invoke_result_t<_Tag, _Domain, _Sender, _Receiver>>,
           "execution::connect(sender, receiver) must return a type that "
           "satisfies the operation_state concept");
-        return tag_invoke(connect_t{}, get_domain(get_env(__rcvr)), (_Sender&&) __sndr, (_Receiver&&) __rcvr);
+        return tag_invoke(_Tag{}, _Domain{}, (_Sender&&) __sndr, (_Receiver&&) __rcvr);
       }
+
       template <class _Sender, class _Receiver>
         requires (!__connectable_with_domain<_Sender, _Receiver>) &&
           __connectable_with_tag_invoke<_Sender, _Receiver>
@@ -1126,6 +1141,7 @@ namespace std::execution {
           "satisfies the operation_state concept");
         return tag_invoke(connect_t{}, (_Sender&&) __sndr, (_Receiver&&) __rcvr);
       }
+
       template <class _Awaitable, class _Receiver>
         requires (!__connectable_with_domain<_Awaitable, _Receiver>) &&
           (!__connectable_with_tag_invoke<_Awaitable, _Receiver>) &&
@@ -1134,6 +1150,7 @@ namespace std::execution {
         -> __connect_awaitable_::__operation_t<_Receiver> {
         return __connect_awaitable((_Awaitable&&) __await, (_Receiver&&) __rcvr);
       }
+
       // This overload is purely for the purposes of debugging why a
       // sender will not connect. Use the __debug_sender function below.
       template <class _Sender, class _Receiver>
@@ -1233,7 +1250,7 @@ namespace std::execution {
   template <class _Sender, class _Receiver>
     concept sender_to =
       sender<_Sender, env_of_t<_Receiver>> &&
-      __receiver_from<_Receiver, _Sender> &&
+      receiver_from<_Receiver, _Sender> &&
       requires (_Sender&& __sndr, _Receiver&& __rcvr) {
         connect((_Sender&&) __sndr, (_Receiver&&) __rcvr);
       };
@@ -1306,6 +1323,11 @@ namespace std::execution {
   template <class _Sender, class _CPO>
     using __completion_scheduler_for =
       __call_result_t<get_completion_scheduler_t<_CPO>, _Sender>;
+
+  template <class _Fun, class _DomainProvider, class... _As>
+    concept __tag_invocable_with_domain =
+      __callable<get_domain_t, _DomainProvider> &&
+      tag_invocable<_Fun, __domain_of_t<_DomainProvider>, _As...>;
 
   template <class _Fun, class _CPO, class _Sender, class... _As>
     concept __tag_invocable_with_completion_scheduler =
@@ -3530,7 +3552,7 @@ namespace std::execution {
         _Scheduler __sched_;
         _Sender __sndr_;
 
-        template <__decays_to<__sender> _Self, class _Receiver>
+        template <__decays_to<__sender> _Self, receiver _Receiver>
           // BUGBUG this constraint is not exactly correct
           requires sender_to<__member_t<_Self, _Sender>, _Receiver>
         friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __rcvr)
@@ -3567,21 +3589,11 @@ namespace std::execution {
       };
 
     struct schedule_from_t {
-      // NOT TO SPEC: permit non-typed senders:
       template <scheduler _Scheduler, sender _Sender>
-        requires tag_invocable<schedule_from_t, _Scheduler, _Sender>
-      auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const
-        noexcept(nothrow_tag_invocable<schedule_from_t, _Scheduler, _Sender>)
-        -> tag_invoke_result_t<schedule_from_t, _Scheduler, _Sender> {
-        return tag_invoke(*this, (_Scheduler&&) __sched, (_Sender&&) __sndr);
-      }
-
-      // NOT TO SPEC: permit non-typed senders:
-      template <scheduler _Scheduler, sender _Sender>
-      auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const
-        -> __sender<__x<decay_t<_Scheduler>>, __x<decay_t<_Sender>>> {
-        return {(_Scheduler&&) __sched, (_Sender&&) __sndr};
-      }
+        auto operator()(_Scheduler&& __sched, _Sender&& __sndr) const
+          -> __sender<__x<decay_t<_Scheduler>>, __x<decay_t<_Sender>>> {
+          return {(_Scheduler&&) __sched, (_Sender&&) __sndr};
+        }
     };
   } // namespace __schedule_from
   using __schedule_from::schedule_from_t;
@@ -3590,34 +3602,91 @@ namespace std::execution {
   /////////////////////////////////////////////////////////////////////////////
   // [execution.senders.adaptors.transfer]
   namespace __transfer {
+    template <class _Scheduler, class _Sender>
+      using __schedule_from_result_t =
+        decltype(schedule_from(__declval<_Scheduler>(), __declval<_Sender>()));
+
+    template <class _SenderId, class _SchedulerId>
+      struct __sender;
+    template <class _Sender, class _Scheduler>
+      __sender(_Sender, _Scheduler)
+        -> __sender<__x<_Sender>, __x<_Scheduler>>;
+
     struct transfer_t {
       template <sender _Sender, scheduler _Scheduler>
-        requires __tag_invocable_with_completion_scheduler<transfer_t, set_value_t, _Sender, _Scheduler>
-      tag_invoke_result_t<transfer_t, __completion_scheduler_for<_Sender, set_value_t>, _Sender, _Scheduler>
-      operator()(_Sender&& __sndr, _Scheduler&& __sched) const
-        noexcept(nothrow_tag_invocable<transfer_t, __completion_scheduler_for<_Sender, set_value_t>, _Sender, _Scheduler>) {
-        auto csch = get_completion_scheduler<set_value_t>(__sndr);
-        return tag_invoke(transfer_t{}, std::move(csch), (_Sender&&) __sndr, (_Scheduler&&) __sched);
-      }
-      template <sender _Sender, scheduler _Scheduler>
-        requires (!__tag_invocable_with_completion_scheduler<transfer_t, set_value_t, _Sender, _Scheduler>) &&
-          tag_invocable<transfer_t, _Sender, _Scheduler>
-      tag_invoke_result_t<transfer_t, _Sender, _Scheduler>
-      operator()(_Sender&& __sndr, _Scheduler&& __sched) const noexcept(nothrow_tag_invocable<transfer_t, _Sender, _Scheduler>) {
-        return tag_invoke(transfer_t{}, (_Sender&&) __sndr, (_Scheduler&&) __sched);
-      }
-      // NOT TO SPEC: permit non-typed senders:
-      template <sender _Sender, scheduler _Scheduler>
-        requires (!__tag_invocable_with_completion_scheduler<transfer_t, set_value_t, _Sender, _Scheduler>) &&
-          (!tag_invocable<transfer_t, _Sender, _Scheduler>)
-      auto operator()(_Sender&& __sndr, _Scheduler&& __sched) const {
-        return schedule_from((_Scheduler&&) __sched, (_Sender&&) __sndr);
-      }
+        auto operator()(_Sender&& __sndr, _Scheduler&& __sched) const {
+          return __sender{(_Sender&&) __sndr, (_Scheduler&&) __sched};
+        }
+
       template <scheduler _Scheduler>
-      __binder_back<transfer_t, decay_t<_Scheduler>> operator()(_Scheduler&& __sched) const {
-        return {{}, {}, {(_Scheduler&&) __sched}};
-      }
+        __binder_back<transfer_t, decay_t<_Scheduler>> operator()(_Scheduler&& __sched) const {
+          return {{}, {}, {(_Scheduler&&) __sched}};
+        }
     };
+
+    template <class _SenderId, class _SchedulerId>
+      struct __sender {
+        using _Sender = __t<_SenderId>;
+        using _Scheduler = __t<_SchedulerId>;
+        using descriptor_t = sender_descriptor_t<transfer_t(_Sender)>;
+
+        _Sender __sndr_;
+        _Scheduler __sched_;
+
+        template <class _Self>
+          using __inner_t =
+            __schedule_from_result_t<
+              __member_t<_Self, _Scheduler>,
+              __member_t<_Self, _Sender>>;
+
+        // The domain of the scheduler, or void if it doesn't have one.
+        using __domain_t =
+          __minvoke1<
+            __if_c<
+              __valid1<__domain_of_t, _Scheduler>,
+              __q1<__domain_of_t>,
+              __mconst<void>>,
+            _Scheduler>;
+
+        // Fall back to calling schedule_from
+        template <__decays_to<__sender> _Self, receiver _Receiver>
+            requires constructible_from<_Sender, __member_t<_Self, _Sender>> &&
+             (!__tag_invocable_with_domain<connect_t, _Scheduler, _Self, _Receiver>) &&
+             sender_to<__inner_t<_Self>, _Receiver>
+          friend auto tag_invoke(connect_t, _Self&& __self, _Receiver&& __rcvr)
+            -> connect_result_t<__inner_t<_Self>, _Receiver> {
+            return connect(
+              schedule_from(((_Self&&) __self).__sched_, ((_Self&&) __self).__sndr_),
+              (_Receiver&&) __rcvr);
+          }
+
+        template <__decays_to<__sender> _Self, class _Env>
+          friend auto tag_invoke(get_completion_signatures_t, _Self&&, _Env&&)
+            -> completion_signatures_of_t<__inner_t<_Self>, _Env>;
+
+        // forward sender queries:
+        template <__sender_queries::__sender_query _Tag, class... _As>
+            requires __none_of<get_completion_scheduler_t<set_value_t>> &&
+              __callable<_Tag, const _Sender&, _As...>
+          friend auto tag_invoke(_Tag __tag, const __sender& __self, _As&&... __as)
+            noexcept(__nothrow_callable<_Tag, const _Sender&, _As...>)
+            -> __call_result_if_t<__sender_queries::__sender_query<_Tag>, _Tag, const _Sender&, _As...> {
+            return ((_Tag&&) __tag)(__self.__sndr_, (_As&&) __as...);
+          }
+
+        template <__one_of<set_value_t, set_stopped_t> _Tag>
+          friend auto tag_invoke(get_completion_scheduler_t<_Tag>, const __sender& __self) noexcept {
+            return __self.__sched_;
+          }
+
+        friend auto tag_invoke(get_domain_t, const __sender& __self) noexcept {
+          if constexpr (__valid1<__domain_of_t, _Scheduler>) {
+            return get_domain(__self.__sched_);
+          } else {
+            return void();
+          }
+        }
+      };
   } // namespace __transfer
   using __transfer::transfer_t;
   inline constexpr transfer_t transfer{};
@@ -3897,8 +3966,8 @@ namespace std::execution {
         template <class _Self, class _OldScheduler>
           static auto __call(_Self&& __self, _OldScheduler __old_sched) {
             return std::move(((_Self&&) __self).__sndr_)
-              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_))
-              | transfer(__old_sched);
+              | transfer(__old_sched)
+              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_));
           }
 
         auto operator()(auto __old_sched) && {
@@ -3924,9 +3993,8 @@ namespace std::execution {
         template <class _Self>
           static auto __call(_Self&& __self) {
             return let_value(
-              transfer(
-                read_with_default(get_scheduler, __self.__sched_),
-                __self.__sched_),
+              read_with_default(get_scheduler, __self.__sched_)
+                | transfer(__self.__sched_),
               __start_fn{__self.__sched_, ((_Self&&) __self).__sndr_});
           }
 
@@ -3979,11 +4047,11 @@ namespace std::execution {
         template <class _Self, class _OldScheduler>
           static auto __call(_Self&& __self, _OldScheduler __old_sched) {
             return ((_Self&&) __self).__sndr_
-              | write(with(get_scheduler, __old_sched), (__with_domain)(__old_sched))
               | transfer(__self.__sched_)
+              | write(with(get_scheduler, __old_sched), (__with_domain)(__old_sched))
               | ((_Self&&) __self).__closure_
-              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_))
-              | transfer(__old_sched);
+              | transfer(__old_sched)
+              | write(with(get_scheduler, __self.__sched_), (__with_domain)(__self.__sched_));
           }
 
         auto operator()(auto __old_sched) && {
@@ -4048,7 +4116,6 @@ namespace std::execution {
 
     template <>
       struct on_t<on_kind::continue_on> {
-        // TODO wrap this in its own sender with a custom tag type
         template <sender _Sender, scheduler _Scheduler, __sender_adaptor_closure_for<_Sender> _Closure>
             requires constructible_from<decay_t<_Sender>, _Sender>
           auto operator()(_Sender&& __sndr, _Scheduler&& __sched, _Closure __closure) const {
