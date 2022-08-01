@@ -437,7 +437,7 @@ namespace std::execution {
     };
 
   template <class _Sender, class _Env = no_env>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     using completion_signatures_of_t =
       __t<__checked_completion_signatures<_Sender, _Env>>;
 
@@ -466,7 +466,7 @@ namespace std::execution {
             class _Env = no_env,
             template <class...> class _Tuple = __decayed_tuple,
             template <class...> class _Variant = __variant>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     using value_types_of_t =
       typename completion_signatures_of_t<_Sender, _Env>::template
         __value_types<_Tuple, _Variant>;
@@ -474,13 +474,13 @@ namespace std::execution {
   template <class _Sender,
             class _Env = no_env,
             template <class...> class _Variant = __variant>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     using error_types_of_t =
       typename completion_signatures_of_t<_Sender, _Env>::template
         __error_types<_Variant>;
 
   template <class _Sender, class _Env = no_env>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     inline constexpr bool sends_stopped =
       (completion_signatures_of_t<_Sender, _Env>
         ::template __count_of<set_stopped_t>::value != 0);
@@ -489,7 +489,7 @@ namespace std::execution {
             class _Env = no_env,
             class _Tuple = __q<__decayed_tuple>,
             class _Variant = __q<__variant>>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     using __value_types_of_t =
       value_types_of_t<
         _Sender, _Env, _Tuple::template __f, _Variant::template __f>;
@@ -497,7 +497,7 @@ namespace std::execution {
   template <class _Sender,
             class _Env = no_env,
             class _Variant = __q<__variant>>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
     using __error_types_of_t =
       error_types_of_t<_Sender, _Env, _Variant::template __f>;
 
@@ -622,7 +622,7 @@ namespace std::execution {
       __completion_signatures::__default_set_error,
     __valid_completion_signatures<_Env> _SetStopped =
       completion_signatures<set_stopped_t()>>
-      requires sender<_Sender, _Env>
+      // requires sender<_Sender, _Env>
   using make_completion_signatures =
     decltype(__completion_signatures::
       __make<_Sender, _Env, _Sigs, __q<_SetValue>, __q1<_SetError>, _SetStopped>(0));
@@ -3347,7 +3347,7 @@ namespace std::execution {
     // The completion information can be stored in situ within a variant in
     // the operation state
     template <class _Sender, class _Env>
-        requires sender<_Sender, _Env>
+        // requires sender<_Sender, _Env>
       struct __completion_storage {
         // Compute a variant type that is capable of storing the results of the
         // input sender when it completes. The variant has type:
@@ -3792,7 +3792,7 @@ namespace std::execution {
   // [execution.senders.adaptors.into_variant]
   namespace __into_variant {
     template <class _Sender, class _Env>
-        requires sender<_Sender, _Env>
+        // requires sender<_Sender, _Env>
       using __into_variant_result_t =
         value_types_of_t<_Sender, _Env>;
 

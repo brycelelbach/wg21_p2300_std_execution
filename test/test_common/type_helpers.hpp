@@ -37,6 +37,12 @@ struct type_array {};
 //! Used as a default empty context
 struct empty_env {};
 
+//! Used as a default value adaptor
+struct identity_value_adapt {
+  template<class _Sender>
+  _Sender operator()(_Sender&& __sndr){ return (_Sender&&) __sndr;}
+};
+
 //! Check that the value_types of a sender matches the expected type
 template <typename ExpectedValType, typename Env = empty_env, typename S>
 inline void check_val_types(S snd) {
